@@ -1,0 +1,188 @@
+[
+  {
+    "id": "prod-001",
+    "name": "Nebilet 5mg",
+    "activeIngredient": "Nebivolol",
+    "category": "Cardiología",
+    "isPriority": true,
+    "nivel": 2,
+    "offers": [
+      {
+        "provider": "LETERAGO",
+        "basePrice": 850,
+        "discount": 15,
+        "netPrice": 722.5,
+        "providerCode": "LET-NEB-05",
+        "bonusScale": { "buy": 12, "free": 1 }
+      },
+      {
+        "provider": "DICEGSA",
+        "basePrice": 860,
+        "discount": 20,
+        "netPrice": 688.0,
+        "providerCode": "DIC-NEB-05"
+      },
+      {
+        "provider": "DIDELSA",
+        "basePrice": 840,
+        "discount": 10,
+        "netPrice": 756.0,
+        "providerCode": "DID-NEB-05"
+      }
+    ]
+  },
+  {
+    "id": "prod-002",
+    "name": "Dolo Neurobión XR",
+    "activeIngredient": "Diclofenaco + Vitaminas B1, B6, B12",
+    "category": "Neurología",
+    "isPriority": true,
+    "nivel": 1,
+    "offers": [
+      {
+        "provider": "DISMEDIC",
+        "basePrice": 450,
+        "discount": 10,
+        "netPrice": 405.0,
+        "providerCode": "DSM-DNXR",
+        "bonusScale": { "buy": 5, "free": 1 }
+      },
+      {
+        "provider": "IMFARSA",
+        "basePrice": 460,
+        "discount": 15,
+        "netPrice": 391.0,
+        "providerCode": "IMF-DNXR"
+      }
+    ]
+  },
+  {
+    "id": "prod-003",
+    "name": "Amoxicilina 500mg",
+    "activeIngredient": "Amoxicilina",
+    "category": "Antibióticos",
+    "isPriority": false,
+    "nivel": 1,
+    "offers": [
+      {
+        "provider": "VESANIC",
+        "basePrice": 120,
+        "discount": 5,
+        "netPrice": 114.0,
+        "providerCode": "VES-AMX-500",
+        "bonusScale": { "buy": 3, "free": 1 }
+      },
+      {
+        "provider": "WALMART / MAYORISTA",
+        "basePrice": 110,
+        "discount": 0,
+        "netPrice": 110.0,
+        "providerCode": "WAL-AMX-500"
+      },
+      {
+        "provider": "DICEGSA",
+        "basePrice": 130,
+        "discount": 15,
+        "netPrice": 110.5,
+        "providerCode": "DIC-AMX-500"
+      }
+    ]
+  },
+  {
+    "id": "prod-004",
+    "name": "Umbrella Gel",
+    "activeIngredient": "Filtros solares UVA/UVB",
+    "category": "Dermatología",
+    "isPriority": false,
+    "nivel": 3,
+    "offers": [
+      {
+        "provider": "LETERAGO",
+        "basePrice": 950,
+        "discount": 20,
+        "netPrice": 760.0,
+        "providerCode": "LET-UMB-G"
+      },
+      {
+        "provider": "DIDELSA",
+        "basePrice": 920,
+        "discount": 10,
+        "netPrice": 828.0,
+        "providerCode": "DID-UMB-G"
+      }
+    ]
+  },
+  {
+    "id": "prod-005",
+    "name": "Leche NAN 1",
+    "activeIngredient": "Fórmula láctea de inicio",
+    "category": "Nutrición",
+    "isPriority": false,
+    "nivel": 1,
+    "offers": [
+      {
+        "provider": "WALMART / MAYORISTA",
+        "basePrice": 650,
+        "discount": 5,
+        "netPrice": 617.5,
+        "providerCode": "WAL-NAN-1"
+      },
+      {
+        "provider": "DICEGSA",
+        "basePrice": 680,
+        "discount": 12,
+        "netPrice": 598.4,
+        "providerCode": "DIC-NAN-1"
+      }
+    ]
+  },
+  {
+    "id": "prod-006",
+    "name": "Extracto de Malta",
+    "activeIngredient": "Malta + Vitaminas",
+    "category": "Nutrición",
+    "isPriority": true,
+    "nivel": 2,
+    "offers": [
+      {
+        "provider": "IMFARSA",
+        "basePrice": 180,
+        "discount": 5,
+        "netPrice": 171.0,
+        "providerCode": "IMF-MALTA",
+        "bonusScale": { "buy": 12, "free": 2 }
+      },
+      {
+        "provider": "DISMEDIC",
+        "basePrice": 175,
+        "discount": 0,
+        "netPrice": 175.0,
+        "providerCode": "DSM-MALTA"
+      }
+    ]
+  },
+  {
+    "id": "prod-007",
+    "name": "Prueba de Embarazo",
+    "activeIngredient": "Detección HCG",
+    "category": "Ginecología",
+    "isPriority": false,
+    "nivel": 1,
+    "offers": [
+      {
+        "provider": "VESANIC",
+        "basePrice": 90,
+        "discount": 10,
+        "netPrice": 81.0,
+        "providerCode": "VES-PRU-EMB"
+      },
+      {
+        "provider": "DICEGSA",
+        "basePrice": 100,
+        "discount": 25,
+        "netPrice": 75.0,
+        "providerCode": "DIC-PRU-EMB"
+      }
+    ]
+  }
+]
