@@ -8,7 +8,7 @@ export default function VencimientosTab() {
   
   const vencimientos = useMemo(() => {
     const today = new Date();
-    const items = inventario.filter(i => i.fecha_vencimiento);
+    const items = inventario.filter(i => i.fecha_vencimiento && i.stock != null && i.stock > 0);
     
     return items.map(item => {
       const vDate = new Date(item.fecha_vencimiento!);

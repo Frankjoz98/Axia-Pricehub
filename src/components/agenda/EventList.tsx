@@ -1,6 +1,7 @@
-import { CheckCircle2, Circle, Truck, AlertTriangle, Sparkles, Clock, Trash2, Edit2 } from 'lucide-react';
+import { CheckCircle2, Circle, Sparkles, Clock, Trash2, Edit2 } from 'lucide-react';
 import type { AgendaEvento } from '../../types';
 import { cn } from '../../lib/utils';
+import { isToday, isTomorrow, isThisWeek, parseISO, isPast } from 'date-fns';
 
 interface EventListProps {
   eventos: AgendaEvento[];
@@ -12,101 +13,118 @@ interface EventListProps {
 export default function EventList({ eventos, onToggleComplete, onEdit, onDelete }: EventListProps) {
   if (eventos.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-slate-200 border-dashed text-center">
-        <Clock className="w-12 h-12 text-slate-300 mb-4" />
-        <h3 className="text-lg font-bold text-slate-700">Día Libre</h3>
-        <p className="text-slate-500">No hay eventos programados para este día.</p>
+      <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border border-slate-200 border-dashed text-center">
+        <Clock className="w-10 h-10 text-slate-300 mb-4" />
+        <h3 className="text-base font-semibold text-slate-700">Día Libre</h3>
+        <p className="text-sm text-slate-500">No hay eventos programados para este día.</p>
       </div>
     );
   }
 
-  const getPriorityStyles = (prioridad: string, completado: boolean) => {
-    if (completado) return 'bg-slate-50 border-slate-200 opacity-60';
-    switch (prioridad) {
-      case 'urgente': return 'bg-rose-50 border-rose-200 shadow-sm shadow-rose-100';
-      case 'alta': return 'bg-amber-50 border-amber-200';
-      case 'baja': return 'bg-slate-50 border-slate-200';
-      default: return 'bg-white border-slate-200';
-    }
+  // Agrupar eventos
+  const groupedEvents = {
+    hoy: [] as AgendaEvento[],
+    manana: [] as AgendaEvento[],
+    estaSemana: [] as AgendaEvento[],
+    futuros: [] as AgendaEvento[],
+    pasados: [] as AgendaEvento[]
   };
 
-  const getIcon = (tipo: string, completado: boolean, prioridad: string) => {
-    if (completado) return <CheckCircle2 className="w-5 h-5 text-emerald-500" />;
+  eventos.forEach(evento => {
+    const date = parseISO(evento.fecha);
+    // Para evitar desfases de zona horaria, usamos la fecha local
+    const localDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
     
-    switch (tipo) {
-      case 'visita_proveedor': return <Truck className="w-5 h-5 text-blue-500" />;
-      case 'pago': return prioridad === 'urgente' ? <AlertTriangle className="w-5 h-5 text-rose-500" /> : <Clock className="w-5 h-5 text-amber-500" />;
-      case 'ai_sugerencia': return <Sparkles className="w-5 h-5 text-violet-500" />;
-      default: return <Circle className="w-5 h-5 text-slate-400" />;
+    if (isPast(localDate) && !isToday(localDate)) {
+       groupedEvents.pasados.push(evento);
+    } else if (isToday(localDate)) {
+       groupedEvents.hoy.push(evento);
+    } else if (isTomorrow(localDate)) {
+       groupedEvents.manana.push(evento);
+    } else if (isThisWeek(localDate)) {
+       groupedEvents.estaSemana.push(evento);
+    } else {
+       groupedEvents.futuros.push(evento);
     }
-  };
+  });
 
-  const getPriorityBadge = (prioridad: string) => {
-    switch (prioridad) {
-      case 'urgente': return <span className="text-[10px] uppercase font-black tracking-wider text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full">Urgente</span>;
-      case 'alta': return <span className="text-[10px] uppercase font-black tracking-wider text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">Alta</span>;
-      default: return null;
-    }
-  };
+  const renderGroup = (title: string, groupEvents: AgendaEvento[]) => {
+    if (groupEvents.length === 0) return null;
 
-  return (
-    <div className="relative space-y-6 before:absolute before:top-4 before:bottom-4 before:ml-[1.1rem] before:w-0.5 before:-translate-x-px before:bg-slate-200">
-      {eventos.map((evento) => (
-        <div 
-          key={evento.id} 
-          className="relative flex items-start gap-4 sm:gap-6 group"
-        >
-          {/* Timeline Node */}
-          <div className="relative z-10 flex items-center justify-center bg-slate-50 py-1">
-            <button 
-              onClick={() => onToggleComplete(evento.id, evento.completado)}
-              className="shrink-0 transition-transform active:scale-90 hover:scale-110 bg-white rounded-full"
+    return (
+      <div className="mb-8 last:mb-0">
+        <h3 className="text-sm font-semibold text-slate-500 mb-4 tracking-wide uppercase">{title}</h3>
+        <div className="space-y-3">
+          {groupEvents.map(evento => (
+            <div 
+              key={evento.id} 
+              className={cn(
+                "group flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm transition-all hover:shadow-md",
+                evento.completado && "opacity-60 bg-slate-50"
+              )}
             >
-              {getIcon(evento.tipo, evento.completado, evento.prioridad)}
-            </button>
-          </div>
-          
-          {/* Card Content */}
-          <div className={cn(
-            "flex-1 p-5 rounded-2xl border transition-all hover:shadow-lg hover:-translate-y-0.5",
-            getPriorityStyles(evento.prioridad, evento.completado)
-          )}>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <h4 className={cn("font-bold text-slate-800 text-lg", evento.completado && "line-through text-slate-500")}>
-                  {evento.titulo}
-                </h4>
-                {!evento.completado && getPriorityBadge(evento.prioridad)}
-                {evento.tipo === 'ai_sugerencia' && !evento.completado && (
-                  <span className="text-[10px] uppercase font-black tracking-wider text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm shadow-violet-200/50 border border-violet-200">
-                    <Sparkles className="w-3 h-3" /> IA
+              {/* Lado Izquierdo */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <button 
+                  onClick={() => onToggleComplete(evento.id, evento.completado)}
+                  className="shrink-0 transition-transform active:scale-90"
+                >
+                  {evento.completado ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  ) : (
+                    <Circle className="w-5 h-5 text-slate-300 hover:text-slate-400" />
+                  )}
+                </button>
+                
+                {/* Prioridad Indicator */}
+                {!evento.completado && (
+                   <div className={cn(
+                     "w-2 h-2 shrink-0 rounded-full",
+                     evento.prioridad === 'urgente' ? 'bg-rose-500' : 
+                     evento.prioridad === 'alta' ? 'bg-amber-500' : 'bg-slate-300'
+                   )} />
+                )}
+
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className={cn("text-sm font-semibold text-slate-900 truncate", evento.completado && "line-through text-slate-500")}>
+                      {evento.titulo}
+                    </h4>
+                    {evento.tipo === 'ai_sugerencia' && !evento.completado && (
+                      <Sparkles className="w-3 h-3 text-violet-400 shrink-0" />
+                    )}
+                  </div>
+                  {evento.descripcion && (
+                    <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                      {evento.descripcion}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Lado Derecho */}
+              <div className="flex items-center gap-3 shrink-0 ml-7 sm:ml-0">
+                <span className="px-2.5 py-0.5 text-[10px] sm:text-xs font-medium rounded-full bg-slate-100 text-slate-600 border border-slate-200/60 capitalize whitespace-nowrap">
+                  {evento.tipo.replace('_', ' ')}
+                </span>
+                
+                {evento.hora_inicio && (
+                  <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {evento.hora_inicio.slice(0,5)}
                   </span>
                 )}
-              </div>
-              
-              {evento.descripcion && (
-                <p className={cn("text-sm text-slate-600 leading-relaxed max-w-3xl", evento.completado && "text-slate-400 line-through")}>
-                  {evento.descripcion}
-                </p>
-              )}
 
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-900/5">
-                {(evento.hora_inicio || evento.hora_fin) && !evento.completado ? (
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
-                    <Clock className="w-3.5 h-3.5" />
-                    {evento.hora_inicio?.slice(0,5) || ''} {evento.hora_fin ? `- ${evento.hora_fin.slice(0,5)}` : ''}
-                  </div>
-                ) : <div />}
-
+                {/* Acciones Hover */}
                 {!evento.id.startsWith('auto-') && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                     {onEdit && (
-                      <button onClick={() => onEdit(evento)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                      <button onClick={() => onEdit(evento)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md transition-colors">
                         <Edit2 className="w-4 h-4" />
                       </button>
                     )}
                     {onDelete && (
-                      <button onClick={() => onDelete(evento.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                      <button onClick={() => onDelete(evento.id)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
@@ -114,9 +132,19 @@ export default function EventList({ eventos, onToggleComplete, onEdit, onDelete 
                 )}
               </div>
             </div>
-          </div>
+          ))}
         </div>
-      ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="relative">
+      {renderGroup('Atrasados / Pasados', groupedEvents.pasados)}
+      {renderGroup('Hoy', groupedEvents.hoy)}
+      {renderGroup('Mañana', groupedEvents.manana)}
+      {renderGroup('Esta Semana', groupedEvents.estaSemana)}
+      {renderGroup('Futuros', groupedEvents.futuros)}
     </div>
   );
 }

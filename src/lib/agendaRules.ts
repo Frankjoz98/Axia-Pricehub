@@ -120,7 +120,7 @@ export function generateSuggestedEvents(
 
   // 4. Vencimientos a 5 meses (150 días)
   inventario.forEach(item => {
-    if (item.fecha_vencimiento) {
+    if (item.fecha_vencimiento && item.stock != null && item.stock > 0) {
       const vDate = new Date(item.fecha_vencimiento);
       const diffDays = Math.ceil((vDate.getTime() - today.getTime()) / msInDay);
       

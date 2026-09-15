@@ -61,6 +61,14 @@ Axia PriceHub es un sistema diseñado para la gestión inteligente de inventario
 - **RF-32 (Event-Driven):** WHEN el pedido es recibido físicamente, THEN se marcará como 'recibido'. WHEN el usuario presiona archivar en un pedido recibido, THEN el sistema lo ocultará de la vista activa para mantener la interfaz limpia.
 - **RF-33 (Ubiquitous):** The sistema DEBE permitir al administrador incrustar la terminal de pedidos (Embedded Mode) directamente dentro del Panel de Órdenes (OrdersPanel) para supervisar y gestionar las sugerencias de los dependientes sin salir de su flujo de trabajo habitual, separando los "Encargos" en una pestaña exclusiva.
 
+### Módulo de Agenda y Tareas (AgendaHub)
+- **RF-34 (Event-Driven):** WHEN el usuario accede a la Agenda, THEN el sistema DEBE mostrar un diseño asimétrico de dos columnas: un Timeline vertical principal (70%) y una barra lateral de herramientas (30%).
+- **RF-35 (Event-Driven):** WHEN el usuario visualiza el Timeline, THEN los eventos DEBEN agruparse cronológicamente (Hoy, Mañana, Esta Semana) usando tarjetas minimalistas.
+- **RF-36 (Event-Driven):** WHEN el usuario utiliza la caja de "Captura Rápida" en la barra lateral y presiona Enter, THEN el sistema DEBE registrar la entrada en la bitácora sin abrir modales pesados.
+- **RF-37 (Ubiquitous):** The sistema DEBE mostrar las tarjetas de eventos del Timeline con una densidad de información alta y alineación horizontal (flex), mostrando título, descripción truncada a 1 línea, píldora de categoría y hora monoespaciada en el lado derecho.
+- **RF-38 (Event-Driven):** WHEN hay una meta activa principal, THEN la barra lateral DEBE destacar su progreso mediante una tarjeta morada que incluya porcentaje de avance numérico y una barra de progreso visual.
+- **RF-39 (Event-Driven):** WHEN se despliega la Captura Rápida de Bitácora, THEN el sistema DEBE mostrar justo debajo las últimas 3 entradas registradas el día de hoy, permitiendo archivar o eliminar rápidamente para dar feedback visual de la captura.
+
 ## 5. Casos Límite y Reglas de Negocio
 - Si un archivo CSV exportado desde Odoo carece de un `odoo_id` válido, la fila DEBE ser ignorada para evitar corromper los cruces de reportes.
 - La paginación en Supabase DEBE incluir `.order('id')` para garantizar resultados deterministas al obtener grandes volúmenes de datos.

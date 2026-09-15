@@ -61,7 +61,7 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
     }
     const inventarioMapByName = new Map((inventario || []).map(i => [i.product_name.toLowerCase(), i]));
 
-    // PASO 1: Mapeo de Sesiones (Regla de Oro)
+    // PASO 1: Mapeo de Sesiones (Regla de Oro con Midpoint)
     const sessionMeta: Record<string, { minDate: Date; maxDate: Date; turno: 'turno1' | 'turno2' | 'turno3'; businessDate: Date }> = {};
     ventas.forEach(v => {
       if (v.sesion) {
@@ -75,18 +75,23 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
       }
     });
 
-    // Calcular Turno y Día Operativo para cada Sesión según su minDate
+    // Calcular Turno y Día Operativo evaluando el punto medio (midpoint) de la sesión
     Object.keys(sessionMeta).forEach(sesion => {
       const meta = sessionMeta[sesion];
-      const hour = meta.minDate.getHours();
+      const midpointTime = meta.minDate.getTime() + (meta.maxDate.getTime() - meta.minDate.getTime()) / 2;
+      const midpointDate = new Date(midpointTime);
+      const hour = midpointDate.getHours();
       
-      // Asignación de Turnos (heurística flexible)
-      if (hour >= 4 && hour < 12) meta.turno = 'turno1'; // Mañana
-      else if (hour >= 12 && hour < 20) meta.turno = 'turno2'; // Tarde
+      // Asignación de Turnos (heurística para Farmacia 24/7 basada en Midpoint)
+      // Mañana: 06:00 a 13:59 
+      // Tarde:  14:00 a 21:59 
+      // Noche:  22:00 a 05:59 
+      if (hour >= 6 && hour < 14) meta.turno = 'turno1'; // Mañana
+      else if (hour >= 14 && hour < 22) meta.turno = 'turno2'; // Tarde
       else meta.turno = 'turno3'; // Noche
 
       // Asignación de Día Operativo (offset solo para Turno Noche post-medianoche)
-      const bd = new Date(meta.minDate.getTime());
+      const bd = new Date(midpointDate.getTime());
       if (meta.turno === 'turno3' && hour < 12) {
         bd.setDate(bd.getDate() - 1);
       }

@@ -34,25 +34,31 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
     const brandStats: Record<string, { revenue: number, cost: number, qty: number }> = {};
     const productStats: Record<string, { revenue: number, margin: number, qty: number }> = {};
 
-    // PASO 1: Mapeo de Sesiones (Regla de Oro)
-    const sessionMeta: Record<string, { minDate: Date; turno: 'turno1' | 'turno2' | 'turno3'; businessDate: Date }> = {};
+    // PASO 1: Mapeo de Sesiones (Regla de Oro con Midpoint)
+    const sessionMeta: Record<string, { minDate: Date; maxDate: Date; turno: 'turno1' | 'turno2' | 'turno3'; businessDate: Date }> = {};
     filteredVentas.forEach(v => {
       if (v.sesion) {
         const d = new Date(v.date);
-        if (!sessionMeta[v.sesion] || d < sessionMeta[v.sesion].minDate) {
-          sessionMeta[v.sesion] = { minDate: d, turno: 'turno1', businessDate: d }; 
+        if (!sessionMeta[v.sesion]) {
+          sessionMeta[v.sesion] = { minDate: d, maxDate: d, turno: 'turno1', businessDate: d }; 
+        } else {
+          if (d < sessionMeta[v.sesion].minDate) sessionMeta[v.sesion].minDate = d;
+          if (d > sessionMeta[v.sesion].maxDate) sessionMeta[v.sesion].maxDate = d;
         }
       }
     });
 
     Object.keys(sessionMeta).forEach(sesion => {
       const meta = sessionMeta[sesion];
-      const hour = meta.minDate.getHours();
-      if (hour >= 4 && hour < 12) meta.turno = 'turno1'; 
-      else if (hour >= 12 && hour < 20) meta.turno = 'turno2'; 
+      const midpointTime = meta.minDate.getTime() + (meta.maxDate.getTime() - meta.minDate.getTime()) / 2;
+      const midpointDate = new Date(midpointTime);
+      const hour = midpointDate.getHours();
+      
+      if (hour >= 6 && hour < 14) meta.turno = 'turno1'; 
+      else if (hour >= 14 && hour < 22) meta.turno = 'turno2'; 
       else meta.turno = 'turno3'; 
 
-      const bd = new Date(meta.minDate.getTime());
+      const bd = new Date(midpointDate.getTime());
       if (meta.turno === 'turno3' && hour < 12) bd.setDate(bd.getDate() - 1);
       meta.businessDate = bd;
     });

@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.2",
     "csv-stringify": "^6.8.3",
+    "date-fns": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.35.0",
