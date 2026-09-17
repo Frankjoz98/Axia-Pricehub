@@ -9,9 +9,9 @@ export default function DoctorPortal() {
   const [searchTerm, setSearchTerm] = useState('');
   const [medicamentos, setMedicamentos] = useState<any[]>([]);
   const [soldProducts, setSoldProducts] = useState<Set<string>>(new Set());
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
-  const todayString = new Date().toISOString().split('T')[0];
-  const { citas, updateEstado } = useCitas(todayString);
+  const { citas, updateEstado } = useCitas(selectedDate);
 
   useEffect(() => {
     // Read-only query to fetch public data for the impulse catalog
@@ -69,7 +69,16 @@ export default function DoctorPortal() {
           <h1 className="text-2xl font-black">Portal Médico</h1>
         </div>
         <p className="opacity-90 font-medium">Bienvenido, Dr. - Jornada Médica</p>
-        <p className="text-xs font-bold opacity-75 mt-1">{new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}</p>
+        
+        <div className="mt-4 bg-white/20 rounded-xl px-3 py-2 flex items-center justify-between backdrop-blur-sm border border-white/10">
+          <span className="text-sm font-bold">Fecha Agenda:</span>
+          <input 
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-transparent border-none outline-none text-white font-bold cursor-pointer text-sm [&::-webkit-calendar-picker-indicator]:invert"
+          />
+        </div>
       </div>
 
       <div className="flex px-4 mt-6 gap-2">
@@ -77,7 +86,7 @@ export default function DoctorPortal() {
           onClick={() => setActiveTab('citas')}
           className={cn("flex-1 py-2.5 rounded-full font-bold text-sm transition-all", activeTab === 'citas' ? "bg-blue-600 text-white shadow-md" : "bg-white text-slate-500 border border-slate-200")}
         >
-          Mis Citas de Hoy
+          Mis Citas
         </button>
         <button 
           onClick={() => setActiveTab('catalogo')}
@@ -115,7 +124,7 @@ export default function DoctorPortal() {
             ))}
             {citas.length === 0 && (
               <div className="text-center py-12 text-slate-400">
-                <p className="font-medium">No tienes citas programadas para hoy.</p>
+                <p className="font-medium">No hay citas programadas para esta fecha.</p>
               </div>
             )}
           </div>
