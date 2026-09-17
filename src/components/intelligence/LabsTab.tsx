@@ -50,9 +50,16 @@ export default function LabsTab({ metrics }: LabsTabProps) {
                   <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Ingreso: C$ {(b.revenue/1000).toFixed(1)}k</p>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="block font-black text-amber-500 text-lg">{b.marginPercent.toFixed(2)}%</span>
-                <span className="block text-[10px] font-bold text-slate-400">Margen Exacto</span>
+              <div className="flex gap-4 text-right">
+                <div>
+                  <span className="block font-black text-amber-500 text-base lg:text-lg">{b.marginPercent.toFixed(2)}%</span>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Margen Real<br/>(Volumen)</span>
+                </div>
+                <div className="w-px bg-slate-200" />
+                <div>
+                  <span className="block font-black text-indigo-500 text-base lg:text-lg">{b.catalogMarginPercent ? b.catalogMarginPercent.toFixed(2) + '%' : 'N/A'}</span>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Prom. Simple<br/>(Catálogo)</span>
+                </div>
               </div>
             </div>
           ))}
@@ -63,7 +70,7 @@ export default function LabsTab({ metrics }: LabsTabProps) {
          <h3 className="font-black text-lg mb-4 text-center">Distribución de Márgenes por Laboratorio (Gráfica)</h3>
          <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie data={metrics.brandData} dataKey="margin" nameKey="name" cx="50%" cy="50%" outerRadius={110} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={12} stroke="none">
+            <Pie data={metrics.brandData} dataKey="margin" nameKey="name" cx="50%" cy="50%" outerRadius={110} label={false} labelLine={false} fontSize={12} stroke="none">
               {metrics.brandData.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
             </Pie>
             <Tooltip formatter={(v: any, _name: any, props: any) => [`C$ ${Number(v).toFixed(0)} (${props.payload.marginPercent.toFixed(1)}%)`, 'Ganancia Neta']} />

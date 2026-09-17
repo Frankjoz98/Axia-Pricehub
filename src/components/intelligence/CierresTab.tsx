@@ -24,13 +24,14 @@ interface SessionSummary {
 
 interface CierresTabProps {
   sessionSummaries: SessionSummary[];
+  comparisons: Record<string, string>;
+  setComparisons: (comparisons: Record<string, string>) => void;
 }
 
-export default function CierresTab({ sessionSummaries }: CierresTabProps) {
+export default function CierresTab({ sessionSummaries, comparisons, setComparisons }: CierresTabProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [turnoFilter, setTurnoFilter] = useState<string>('all');
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
-  const [comparisons, setComparisons] = useState<Record<string, string>>({});
 
   const formatCurrency = (val: number) => `C$ ${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -60,7 +61,7 @@ export default function CierresTab({ sessionSummaries }: CierresTabProps) {
   };
 
   const handleCompareChange = (sesion: string, val: string) => {
-    setComparisons(prev => ({ ...prev, [sesion]: val }));
+    setComparisons({ ...comparisons, [sesion]: val });
   };
 
   return (

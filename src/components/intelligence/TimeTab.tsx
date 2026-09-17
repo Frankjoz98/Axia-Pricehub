@@ -6,9 +6,31 @@ interface TimeTabProps {
   metrics: any;
   timeGrouping: 'daily' | 'weekly' | 'monthly';
   setTimeGrouping: (val: 'daily' | 'weekly' | 'monthly') => void;
+  onDrillDown?: (dateStr: string) => void;
 }
 
-export default function TimeTab({ metrics, timeGrouping, setTimeGrouping }: TimeTabProps) {
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const totalVenta = (data.turno1 || 0) + (data.turno2 || 0) + (data.turno3 || 0);
+    return (
+      <div className="bg-slate-900 text-white p-4 rounded-xl shadow-xl border border-slate-700">
+        <p className="text-slate-400 text-xs font-bold mb-2">{label}</p>
+        <p className="text-xl font-black mb-3 text-white">Total Venta: C$ {totalVenta.toFixed(0)}</p>
+        <div className="space-y-1 text-sm font-medium">
+          <p className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Mañana: C$ {(data.turno1 || 0).toFixed(0)}</p>
+          <p className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Tarde: C$ {(data.turno2 || 0).toFixed(0)}</p>
+          <p className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Noche: C$ {(data.turno3 || 0).toFixed(0)}</p>
+          <div className="h-px bg-slate-700 my-2" />
+          <p className="flex items-center gap-2 text-rose-400"><span className="w-2 h-2 rounded-full bg-rose-500"></span> Margen Bruto: C$ {(data.margin || 0).toFixed(0)}</p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+export default function TimeTab({ metrics, timeGrouping, setTimeGrouping, onDrillDown }: TimeTabProps) {
   if (!metrics) return null;
 
   return (
@@ -86,20 +108,11 @@ export default function TimeTab({ metrics, timeGrouping, setTimeGrouping }: Time
               }}
             />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-            <Tooltip 
-              wrapperStyle={{ zIndex: 100 }}
-              formatter={(value: any, name: any) => {
-                if (name === 'turno1') return [`C$ ${Number(value).toFixed(0)}`, 'Mañana'];
-                if (name === 'turno2') return [`C$ ${Number(value).toFixed(0)}`, 'Tarde'];
-                if (name === 'turno3') return [`C$ ${Number(value).toFixed(0)}`, 'Noche'];
-                if (name === 'margin') return [`C$ ${Number(value).toFixed(0)}`, 'Margen Bruto'];
-                return [`C$ ${Number(value).toFixed(0)}`, name];
-              }}
-            />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9' }} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }} />
-            <Bar dataKey="turno1" stackId="a" fill="#10b981" name="Mañana" maxBarSize={50} isAnimationActive={false} />
-            <Bar dataKey="turno2" stackId="a" fill="#f59e0b" name="Tarde" maxBarSize={50} isAnimationActive={false} />
-            <Bar dataKey="turno3" stackId="a" fill="#3b82f6" name="Noche" maxBarSize={50} isAnimationActive={false} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="turno1" stackId="a" fill="#10b981" name="Mañana" maxBarSize={50} isAnimationActive={false} cursor="pointer" onClick={(data: any) => onDrillDown && onDrillDown(data?.payload?.sessionIds && data.payload.sessionIds.length > 0 ? 'sessions:' + data.payload.sessionIds.join(',') : (data?.payload?.time || data?.time))} />
+            <Bar dataKey="turno2" stackId="a" fill="#f59e0b" name="Tarde" maxBarSize={50} isAnimationActive={false} cursor="pointer" onClick={(data: any) => onDrillDown && onDrillDown(data?.payload?.sessionIds && data.payload.sessionIds.length > 0 ? 'sessions:' + data.payload.sessionIds.join(',') : (data?.payload?.time || data?.time))} />
+            <Bar dataKey="turno3" stackId="a" fill="#3b82f6" name="Noche" maxBarSize={50} isAnimationActive={false} radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data: any) => onDrillDown && onDrillDown(data?.payload?.sessionIds && data.payload.sessionIds.length > 0 ? 'sessions:' + data.payload.sessionIds.join(',') : (data?.payload?.time || data?.time))} />
             <Line type="monotone" dataKey="margin" stroke="#ef4444" strokeWidth={3} dot={false} name="Margen Bruto" isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>

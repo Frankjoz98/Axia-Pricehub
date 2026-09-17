@@ -24,7 +24,7 @@ export default function ReportExportModal({
     }, 500);
   };
 
-  const setPresetRange = (preset: 'week' | 'month' | 'sept') => {
+  const setPresetRange = (preset: 'week' | 'month' | 'current_month') => {
     const today = new Date();
     setReportEndDate(today.toISOString().split('T')[0]);
     if (preset === 'week') {
@@ -35,8 +35,9 @@ export default function ReportExportModal({
       const past = new Date(today);
       past.setMonth(past.getMonth() - 1);
       setReportStartDate(past.toISOString().split('T')[0]);
-    } else if (preset === 'sept') {
-      setReportStartDate('2026-09-01');
+    } else if (preset === 'current_month') {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      setReportStartDate(start.toISOString().split('T')[0]);
     }
   };
 
@@ -55,7 +56,7 @@ export default function ReportExportModal({
           <div className="grid grid-cols-3 gap-2">
             <button onClick={() => setPresetRange('week')} className="px-2 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Últimos 7 días</button>
             <button onClick={() => setPresetRange('month')} className="px-2 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Último mes</button>
-            <button onClick={() => setPresetRange('sept')} className="px-2 py-2 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg">Septiembre</button>
+            <button onClick={() => setPresetRange('current_month')} className="px-2 py-2 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg">Mes Actual</button>
           </div>
 
           <div>

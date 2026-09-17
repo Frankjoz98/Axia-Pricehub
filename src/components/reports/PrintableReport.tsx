@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, BarChart, Bar, Legend } from 'recharts';
-import type { VentaHistorica } from '../../types';
+import type { VentaHistorica, OdooInventario } from '../../types';
 
 interface PrintableReportProps {
   ventas: VentaHistorica[];
+  inventario?: OdooInventario[];
   startDate: string;
   endDate: string;
 }
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
-export default function PrintableReport({ ventas, startDate, endDate }: PrintableReportProps) {
+export default function PrintableReport({ ventas, inventario = [], startDate, endDate }: PrintableReportProps) {
   const metrics = useMemo(() => {
     const start = new Date(startDate);
     start.setHours(0,0,0,0);
@@ -70,7 +71,10 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
       
       totalRevenue += revenue;
       totalCost += cost;
-      if (v.order_ref) uniqueTickets.add(v.order_ref);
+      if (v.order_ref) {
+        const ticketKey = v.sesion ? `${v.sesion}_${v.order_ref}` : v.order_ref;
+        uniqueTickets.add(ticketKey);
+      }
       
       if (v.sesion) {
         totalPosRevenue += revenue;
@@ -125,6 +129,21 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
     const totalMargin = totalRevenue - totalCost;
     const marginPercent = totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : 0;
     const avgTicket = uniqueTickets.size > 0 ? totalRevenue / uniqueTickets.size : 0;
+    
+    const globalCatalogMarginPercent = (() => {
+      let sumOfMarginPercents = 0;
+      let count = 0;
+      if (inventario) {
+        inventario.forEach(inv => {
+          if (inv.precio > 0) {
+            const m = ((inv.precio - inv.costo) / inv.precio) * 100;
+            sumOfMarginPercents += m;
+            count++;
+          }
+        });
+      }
+      return count > 0 ? sumOfMarginPercents / count : 0;
+    })();
 
     const topStaff = Object.entries(revenueByStaff).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const topHours = Object.entries(revenueByHour).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -137,15 +156,32 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
       turno3: data.turno3
     }));
 
+    const brandCatalogStats: Record<string, { sum: number, count: number }> = {};
+    if (inventario) {
+      inventario.forEach(inv => {
+        const b = inv.marca || 'Sin Especificar';
+        if (inv.precio > 0) {
+          if (!brandCatalogStats[b]) brandCatalogStats[b] = { sum: 0, count: 0 };
+          brandCatalogStats[b].sum += ((inv.precio - inv.costo) / inv.precio) * 100;
+          brandCatalogStats[b].count += 1;
+        }
+      });
+    }
+
     const brandData = Object.entries(brandStats)
       .sort((a, b) => b[1].revenue - a[1].revenue)
-      .map(([name, stats]) => ({
-        name,
-        value: stats.revenue,
-        margin: stats.revenue - stats.cost,
-        marginPercent: stats.revenue > 0 ? ((stats.revenue - stats.cost) / stats.revenue) * 100 : 0,
-        qty: stats.qty
-      }));
+      .map(([name, stats]) => {
+        const catStats = brandCatalogStats[name];
+        const catalogMarginPercent = catStats && catStats.count > 0 ? (catStats.sum / catStats.count) : null;
+        return {
+          name,
+          value: stats.revenue,
+          margin: stats.revenue - stats.cost,
+          marginPercent: stats.revenue > 0 ? ((stats.revenue - stats.cost) / stats.revenue) * 100 : 0,
+          catalogMarginPercent,
+          qty: stats.qty
+        };
+      });
       
     const topBrands = brandData.slice(0, 6); // For PieChart
     const topProducts = Object.entries(productStats)
@@ -170,9 +206,10 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
       totalRevenue, totalCost, totalMargin, marginPercent, avgTicket, totalTickets: uniqueTickets.size,
       totalPosRevenue, totalBackendRevenue,
       topStaff, topHours, dailyData, brandData, topBrands, topProducts, bestDay, bestBrand, mostProfitableBrand, bestStaff, bestHour,
-      totalT1, totalT2, totalT3
+      totalT1, totalT2, totalT3,
+      globalCatalogMarginPercent
     };
-  }, [ventas, startDate, endDate]);
+  }, [ventas, inventario, startDate, endDate]);
 
   const formatter = new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -218,7 +255,12 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
           </div>
           <div className="border-l-4 border-amber-400 pl-4 py-1">
             <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Margen de Rentabilidad</p>
-            <p className="text-3xl font-black text-amber-600 tracking-tight">{metrics.marginPercent.toFixed(1)}%</p>
+            <div className="flex items-end gap-2">
+              <p className="text-3xl font-black text-amber-600 tracking-tight">{metrics.marginPercent.toFixed(1)}%</p>
+              {metrics.globalCatalogMarginPercent > 0 && (
+                <span className="text-sm font-bold text-indigo-500 mb-1 leading-none tracking-tight">({metrics.globalCatalogMarginPercent.toFixed(1)}% Catálogo)</span>
+              )}
+            </div>
           </div>
           <div className="border-l-4 border-indigo-500 pl-4 py-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Flujo de Tickets (Promedio)</p>
@@ -285,7 +327,8 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
                       <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-widest">Laboratorio</th>
                       <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Facturado</th>
                       <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Ganancia</th>
-                      <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Margen</th>
+                      <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Margen Real</th>
+                      <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Catálogo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -304,9 +347,18 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
                         <td className="py-3 text-right font-black text-slate-900">{formatter.format(brand.value)}</td>
                         <td className="py-3 text-right font-bold text-emerald-600">{formatter.format(brand.margin)}</td>
                         <td className="py-3 text-right">
-                          <span className={`text-xs font-black px-2 py-1 rounded-full ${brand.marginPercent >= 30 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          <span className={`text-[11px] font-black px-2.5 py-1 rounded-full ${brand.marginPercent >= 30 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                             {brand.marginPercent.toFixed(1)}%
                           </span>
+                        </td>
+                        <td className="py-3 text-right">
+                          {brand.catalogMarginPercent !== null ? (
+                            <span className="text-[11px] font-black text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-full">
+                              {brand.catalogMarginPercent.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-300">-</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -315,7 +367,7 @@ export default function PrintableReport({ ventas, startDate, endDate }: Printabl
               </div>
             </div>
 
-            <div className="bg-amber-50/50 rounded-2xl p-5 border border-amber-100">
+            <div className="bg-amber-50/50 rounded-2xl p-5 border border-amber-100 break-inside-avoid shadow-sm mt-4">
               <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Nota Gerencial / Insights</h4>
               <p className="text-sm text-slate-700 leading-relaxed font-medium">
                 Aunque <strong className="text-amber-700">{metrics.bestBrand.name}</strong> genera el mayor volumen de facturación bruta ({formatter.format(metrics.bestBrand.value)}), el laboratorio más rentable para el negocio actualmente es <strong className="text-emerald-700">{metrics.mostProfitableBrand.name}</strong>, el cual deja un espectacular margen neto del <strong className="text-emerald-700">{metrics.mostProfitableBrand.marginPercent.toFixed(1)}%</strong>. Debería considerarse incentivar a los asesores a priorizar esta línea de alta rentabilidad.

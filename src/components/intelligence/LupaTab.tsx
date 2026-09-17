@@ -1,24 +1,49 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Package, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface LupaTabProps {
   ventas: any[];
   inventario: any[];
+  preSearch?: string;
+  onClearPreSearch?: () => void;
 }
 
-export default function LupaTab({ ventas, inventario }: LupaTabProps) {
+export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearch }: LupaTabProps) {
   const [lupaSearch, setLupaSearch] = useState('');
+
+  useEffect(() => {
+    if (preSearch) {
+      setLupaSearch(preSearch);
+      if (onClearPreSearch) onClearPreSearch();
+    }
+  }, [preSearch, onClearPreSearch]);
 
   const lupaResults = useMemo(() => {
     if (lupaSearch.length < 3) return [];
     const lowerSearch = lupaSearch.toLowerCase();
-    return ventas.filter(v => 
-      v.product_name.toLowerCase().includes(lowerSearch) || 
-      (v.order_ref && v.order_ref.toLowerCase().includes(lowerSearch)) ||
-      (v.marca && v.marca.toLowerCase().includes(lowerSearch)) ||
-      (v.sesion && v.sesion.toLowerCase().includes(lowerSearch))
-    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const isDateSearch = /^\d{4}-\d{2}-\d{2}$/.test(lowerSearch);
+    const isSessionSearch = lowerSearch.startsWith('sessions:');
+    let sessionIds: string[] = [];
+    if (isSessionSearch) {
+      sessionIds = lowerSearch.replace('sessions:', '').split(',').map(s => s.trim());
+    }
+    
+    return ventas.filter(v => {
+      if (isSessionSearch) {
+        return v.sesion && sessionIds.includes(v.sesion.toLowerCase());
+      }
+
+      const vDateStr = new Date(v.date).toISOString().split('T')[0];
+      if (isDateSearch) {
+        return vDateStr === lowerSearch;
+      }
+
+      return v.product_name.toLowerCase().includes(lowerSearch) || 
+             (v.order_ref && v.order_ref.toLowerCase().includes(lowerSearch)) ||
+             (v.marca && v.marca.toLowerCase().includes(lowerSearch)) ||
+             (v.sesion && v.sesion.toLowerCase().includes(lowerSearch));
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [lupaSearch, ventas]);
 
   const lupaInventoryResults = useMemo(() => {
@@ -31,9 +56,9 @@ export default function LupaTab({ ventas, inventario }: LupaTabProps) {
     );
   }, [lupaSearch, inventario]);
 
-  const lupaTotalQty = lupaResults.reduce((a, b) => a + b.quantity, 0);
-  const lupaTotalRevenue = lupaResults.reduce((a, b) => a + (b.quantity * b.unit_price), 0);
-  const lupaTotalCost = lupaResults.reduce((a, b) => a + (b.total_cost || 0), 0);
+  const lupaTotalQty = useMemo(() => lupaResults.reduce((a, b) => a + b.quantity, 0), [lupaResults]);
+  const lupaTotalRevenue = useMemo(() => lupaResults.reduce((a, b) => a + (b.quantity * b.unit_price), 0), [lupaResults]);
+  const lupaTotalCost = useMemo(() => lupaResults.reduce((a, b) => a + (b.total_cost || 0), 0), [lupaResults]);
   
   const handleExportLupa = () => {
     if (lupaResults.length === 0) return;

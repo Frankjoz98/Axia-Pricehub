@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Plus, LogOut, Search, ClipboardList, CheckCircle2, Inbox, User } from 'lucide-react';
+import { Plus, LogOut, Search, ClipboardList, CheckCircle2, Inbox, User, Calendar, Clock } from 'lucide-react';
 import { supabase } from '../../supabase';
 import { usePedidos } from '../../hooks/usePedidos';
 import PedidoCard from './PedidoCard';
 import PedidoForm from './PedidoForm';
+import CitaForm from './CitaForm';
+import { useCitas } from '../../hooks/useCitas';
 
 interface PedidosTerminalProps {
   isEmbedded?: boolean;
@@ -11,11 +13,14 @@ interface PedidosTerminalProps {
 
 export default function PedidosTerminal({ isEmbedded = false }: PedidosTerminalProps) {
   const { pedidos, isLoading, addPedido, updateEstado, deletePedido } = usePedidos();
-  const [activeTab, setActiveTab] = useState<'pendientes' | 'encargos' | 'procesados'>('pendientes');
+  const { citas, isLoading: isLoadingCitas, addCita, updateEstado: updateCitaEstado, deleteCita } = useCitas();
+  const [activeTab, setActiveTab] = useState<'pendientes' | 'encargos' | 'procesados' | 'citas'>('pendientes');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [search, setSearch] = useState('');
 
   const filteredPedidos = useMemo(() => {
+    if (activeTab === 'citas') return [];
+    
     let filtered = pedidos.filter(p => {
       if (activeTab === 'pendientes') return p.estado === 'pendiente' && p.tipo_pedido !== 'encargo_cliente';
       if (activeTab === 'encargos') return p.tipo_pedido === 'encargo_cliente' && p.estado !== 'archivado';
@@ -34,6 +39,16 @@ export default function PedidosTerminal({ isEmbedded = false }: PedidosTerminalP
     
     return filtered;
   }, [pedidos, activeTab, search]);
+
+  const filteredCitas = useMemo(() => {
+    if (activeTab !== 'citas') return [];
+    let filtered = citas;
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(c => c.paciente.toLowerCase().includes(q));
+    }
+    return filtered;
+  }, [citas, activeTab, search]);
 
   const handleLogout = async () => {
     if (window.confirm('¿Seguro que deseas salir de la terminal?')) {
@@ -127,33 +142,73 @@ export default function PedidosTerminal({ isEmbedded = false }: PedidosTerminalP
             <CheckCircle2 className="w-4 h-4" /> En Proceso
             <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg text-xs">{pedidos.filter(p => (p.estado === 'pedido' || p.estado === 'recibido') && p.tipo_pedido !== 'encargo_cliente').length}</span>
           </button>
+          
+          <button 
+            onClick={() => setActiveTab('citas')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all min-w-30 ${
+              activeTab === 'citas' 
+                ? 'bg-white text-indigo-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+            }`}
+          >
+            <Calendar className="w-4 h-4" /> Agenda Médica
+            <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg text-xs">{citas.filter(c => c.estado === 'pendiente').length}</span>
+          </button>
         </div>
 
         {/* Listado */}
-        {isLoading ? (
+        {(activeTab !== 'citas' && isLoading) || (activeTab === 'citas' && isLoadingCitas) ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
           </div>
-        ) : filteredPedidos.length === 0 ? (
+        ) : (activeTab !== 'citas' && filteredPedidos.length === 0) || (activeTab === 'citas' && filteredCitas.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-3xl border border-slate-200 border-dashed">
             <Inbox className="w-16 h-16 text-slate-200 mb-4" />
             <h3 className="text-xl font-bold text-slate-800 mb-2">Bandeja Vacía</h3>
             <p className="text-slate-500 max-w-sm">
               {activeTab === 'pendientes' 
                 ? 'No hay requerimientos pendientes de solicitud en este momento.'
-                : 'No hay pedidos en proceso.'}
+                : activeTab === 'citas' ? 'No hay citas médicas agendadas.' : 'No hay pedidos en proceso.'}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredPedidos.map(pedido => (
-              <PedidoCard 
-                key={pedido.id} 
-                pedido={pedido} 
-                onAction={(n) => updateEstado(pedido.id, n)}
-                onDelete={() => deletePedido(pedido.id)}
-              />
-            ))}
+            {activeTab !== 'citas' ? (
+              filteredPedidos.map(pedido => (
+                <PedidoCard 
+                  key={pedido.id} 
+                  pedido={pedido} 
+                  onAction={(n) => updateEstado(pedido.id, n)}
+                  onDelete={() => deletePedido(pedido.id)}
+                />
+              ))
+            ) : (
+              filteredCitas.map(cita => (
+                <div key={cita.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-black text-slate-800">{cita.paciente}</h4>
+                      <div className="flex items-center gap-4 mt-2">
+                        <p className="text-sm text-slate-500 font-medium flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {cita.fecha}</p>
+                        <p className="text-sm text-slate-500 font-medium flex items-center gap-1.5"><Clock className="w-4 h-4" /> {cita.hora}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                      cita.estado === 'pendiente' ? 'bg-amber-100 text-amber-700' :
+                      cita.estado === 'atendido' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                    }`}>
+                      {cita.estado.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 mt-2 pt-3 border-t border-slate-100">
+                    {cita.estado === 'pendiente' && (
+                      <button onClick={() => updateCitaEstado(cita.id, 'cancelado')} className="flex-1 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200">Cancelar</button>
+                    )}
+                    <button onClick={() => deleteCita(cita.id)} className="flex-1 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-sm font-bold hover:bg-rose-100">Eliminar</button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </main>
@@ -171,10 +226,17 @@ export default function PedidosTerminal({ isEmbedded = false }: PedidosTerminalP
       )}
 
       {isModalOpen && (
-        <PedidoForm 
-          onClose={() => setIsModalOpen(false)}
-          onSave={addPedido}
-        />
+        activeTab === 'citas' ? (
+          <CitaForm 
+            onClose={() => setIsModalOpen(false)}
+            onSave={addCita}
+          />
+        ) : (
+          <PedidoForm 
+            onClose={() => setIsModalOpen(false)}
+            onSave={addPedido}
+          />
+        )
       )}
     </div>
   );

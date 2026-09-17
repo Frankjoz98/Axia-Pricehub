@@ -7,9 +7,24 @@ interface UseBusinessMetricsProps {
   ordenes?: PurchaseOrder[];
   timeGrouping?: 'daily' | 'weekly' | 'monthly' | 'shift';
   weeklySales?: number;
+  dateRange?: { start: Date | null, end: Date | null };
 }
 
-export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], timeGrouping = 'monthly', weeklySales = 0 }: UseBusinessMetricsProps) {
+export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], timeGrouping = 'monthly', weeklySales = 0, dateRange }: UseBusinessMetricsProps) {
+  const filteredVentas = useMemo(() => {
+    return dateRange && (dateRange.start || dateRange.end) ? ventas.filter(v => {
+      const d = new Date(v.date);
+      if (dateRange.start && d < dateRange.start) return false;
+      if (dateRange.end) {
+        // Adjust end date to the very end of the day to ensure full day coverage
+        const endOfDay = new Date(dateRange.end);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (d > endOfDay) return false;
+      }
+      return true;
+    }) : ventas;
+  }, [ventas, dateRange?.start, dateRange?.end]);
+
   return useMemo(() => {
     let totalRevenue = 0;
     let totalCost = 0;
@@ -22,7 +37,7 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
     const hourlyStats: Record<string, { revenue: number; count: number }> = {};
     const dayOfWeekStats: Record<string, { revenue: number; count: number }> = {};
     const staffStats: Record<string, { revenue: number; margin: number; txs: number }> = {};
-    const brandCatalogStats: Record<string, { totalPrecio: number; totalCosto: number; totalProducts: number; products: typeof inventario }> = {};
+    const brandCatalogStats: Record<string, { totalPrecio: number; totalCosto: number; totalProducts: number; sumOfMarginPercents: number; products: typeof inventario }> = {};
     const timeStats: Record<string, { revenue: number; margin: number; cost: number; dateForSort: string; turno1: number; turno2: number; turno3: number; posRevenue: number; backendRevenue: number }> = {};
 
     const getWeekNumber = (d: Date) => {
@@ -37,12 +52,14 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
       inventario.forEach(inv => {
         const b = inv.marca || 'Sin Especificar';
         if (!brandStats[b]) brandStats[b] = { revenue: 0, margin: 0, qty: 0 };
-        if (!brandCatalogStats[b]) brandCatalogStats[b] = { totalPrecio: 0, totalCosto: 0, totalProducts: 0, products: [] };
+        if (!brandCatalogStats[b]) brandCatalogStats[b] = { totalPrecio: 0, totalCosto: 0, totalProducts: 0, sumOfMarginPercents: 0, products: [] };
         brandCatalogStats[b].products.push(inv);
         if (inv.precio > 0) {
           brandCatalogStats[b].totalPrecio += inv.precio;
           brandCatalogStats[b].totalCosto += inv.costo;
           brandCatalogStats[b].totalProducts += 1;
+          const individualMargin = ((inv.precio - inv.costo) / inv.precio) * 100;
+          brandCatalogStats[b].sumOfMarginPercents += individualMargin;
         }
       });
     }
@@ -63,7 +80,7 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
 
     // PASO 1: Mapeo de Sesiones (Regla de Oro con Midpoint)
     const sessionMeta: Record<string, { minDate: Date; maxDate: Date; turno: 'turno1' | 'turno2' | 'turno3'; businessDate: Date }> = {};
-    ventas.forEach(v => {
+    filteredVentas.forEach(v => {
       if (v.sesion) {
         const d = new Date(v.date);
         if (!sessionMeta[v.sesion]) {
@@ -135,7 +152,7 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
       return v.product_name;
     };
 
-    ventas.forEach(v => {
+    filteredVentas.forEach(v => {
       const revenue = v.quantity * v.unit_price;
       const invItem = (v.odoo_id ? inventarioMapById.get(v.odoo_id) : undefined) || inventarioMapByName.get(v.product_name.toLowerCase());
       const cost = v.total_cost > 0 ? v.total_cost : (invItem && invItem.costo > 0 ? (v.quantity * invItem.costo) : 0);
@@ -146,7 +163,10 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
       totalRevenue += revenue;
       totalCost += cost;
       totalMargin += margin;
-      if (v.order_ref) totalTransactions.add(v.order_ref);
+      if (v.order_ref) {
+        const ticketKey = v.sesion ? `${v.sesion}_${v.order_ref}` : v.order_ref;
+        totalTransactions.add(ticketKey);
+      }
 
       const staffName = v.cajero && v.cajero !== 'Sin Asignar' ? v.cajero : (v.vendedor && v.vendedor !== 'Sin Asignar' ? v.vendedor : 'Desconocido');
 
@@ -256,19 +276,24 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
     const topMargin = Object.entries(productStats).map(([name, s]) => ({ name: name.length > 25 ? name.substring(0, 25) + '...' : name, fullName: name, ...s })).sort((a, b) => b.margin - a.margin).slice(0, 10);
     const categoryData = Object.entries(categoryStats).map(([name, s]) => ({ name: name.length > 15 ? name.substring(0, 15) + '...' : name, ...s })).sort((a, b) => b.margin - a.margin).slice(0, 8);
     
-    const allBrandsData = Object.entries(brandStats).map(([name, s]) => ({ 
-      name, fullName: name, ...s, 
-      percentOfRevenue: totalRevenue > 0 ? (s.revenue / totalRevenue) * 100 : 0,
-      marginPercent: s.revenue > 0 ? (s.margin / s.revenue) * 100 : 0
-    })).sort((a, b) => b.qty - a.qty);
+    const allBrandsData = Object.entries(brandStats).map(([name, s]) => {
+      const catStat = brandCatalogStats[name];
+      const catalogMarginPercent = catStat && catStat.totalProducts > 0 ? (catStat.sumOfMarginPercents / catStat.totalProducts) : 0;
+      return { 
+        name, fullName: name, ...s, 
+        percentOfRevenue: totalRevenue > 0 ? (s.revenue / totalRevenue) * 100 : 0,
+        marginPercent: s.revenue > 0 ? (s.margin / s.revenue) * 100 : 0,
+        catalogMarginPercent
+      };
+    }).sort((a, b) => b.qty - a.qty);
     const brandData = allBrandsData.slice(0, 10);
     
     const allProductsData = Object.entries(productStats).map(([name, s]) => ({ fullName: name, ...s })).sort((a, b) => b.qty - a.qty);
     
     let minDate = new Date().getTime();
     let maxDate = new Date(0).getTime();
-    if (ventas.length > 0) {
-      ventas.forEach(v => {
+    if (filteredVentas.length > 0) {
+      filteredVentas.forEach(v => {
         const d = new Date(v.date).getTime();
         if (d < minDate) minDate = d;
         if (d > maxDate) maxDate = d;
@@ -376,20 +401,79 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
       backendRevenue += s.backendRevenue;
     });
 
-    const trendData = sortedTimeData.slice(-30).map(s => ({ 
-      ...s,
-      time: timeGrouping === 'monthly' ? s.time.substring(5) : s.time
-    }));
+    let trendData: any[] = [];
+    if (timeGrouping === 'daily') {
+      const dailyMap: Record<string, any> = {};
+      
+      Object.values(sessionSummaries).forEach(session => {
+        const dateKey = new Date(session.minDate).toISOString().split('T')[0];
+        if (!dailyMap[dateKey]) dailyMap[dateKey] = { time: dateKey, revenue: 0, margin: 0, turno1: 0, turno2: 0, turno3: 0, sessionIds: [] };
+        
+        dailyMap[dateKey].revenue += session.revenue;
+        dailyMap[dateKey].margin += session.margin;
+        
+        if (session.turno === 'turno1') dailyMap[dateKey].turno1 += session.revenue;
+        else if (session.turno === 'turno2') dailyMap[dateKey].turno2 += session.revenue;
+        else if (session.turno === 'turno3') dailyMap[dateKey].turno3 += session.revenue;
+        
+        if (!dailyMap[dateKey].sessionIds.includes(session.sesion)) {
+          dailyMap[dateKey].sessionIds.push(session.sesion);
+        }
+      });
+      
+      filteredVentas.forEach(v => {
+        if (!v.sesion) {
+           const d = new Date(v.date);
+           const dateKey = d.toISOString().split('T')[0];
+           if (!dailyMap[dateKey]) dailyMap[dateKey] = { time: dateKey, revenue: 0, margin: 0, turno1: 0, turno2: 0, turno3: 0, sessionIds: [] };
+           
+           const revenue = v.quantity * v.unit_price;
+           const invItem = (v.odoo_id ? inventarioMapById.get(v.odoo_id) : undefined) || inventarioMapByName.get(v.product_name.toLowerCase());
+           const cost = v.total_cost > 0 ? v.total_cost : (invItem && invItem.costo > 0 ? (v.quantity * invItem.costo) : 0);
+           const margin = revenue - cost;
+
+           dailyMap[dateKey].revenue += revenue;
+           dailyMap[dateKey].margin += margin;
+           
+           const hour = d.getHours();
+           if (hour >= 6 && hour < 14) dailyMap[dateKey].turno1 += revenue;
+           else if (hour >= 14 && hour < 22) dailyMap[dateKey].turno2 += revenue;
+           else dailyMap[dateKey].turno3 += revenue;
+        }
+      });
+      
+      trendData = Object.values(dailyMap).sort((a, b) => a.time.localeCompare(b.time)).slice(-30);
+    } else {
+      trendData = sortedTimeData.slice(-30).map(s => ({ 
+        ...s,
+        time: timeGrouping === 'monthly' ? s.time.substring(5) : s.time
+      }));
+    }
 
     const marginPercent = totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : 0;
     const ticketAvg = totalTransactions.size > 0 ? totalRevenue / totalTransactions.size : 0;
+    
+    const globalCatalogMarginPercent = (() => {
+      let sumOfMarginPercents = 0;
+      let count = 0;
+      if (inventario) {
+        inventario.forEach(inv => {
+          if (inv.precio > 0) {
+            const m = ((inv.precio - inv.costo) / inv.precio) * 100;
+            sumOfMarginPercents += m;
+            count++;
+          }
+        });
+      }
+      return count > 0 ? sumOfMarginPercents / count : 0;
+    })();
     
     const brandCatalogData = Object.entries(brandCatalogStats)
       .filter(([_, s]) => s.totalPrecio > 0)
       .map(([name, s]) => ({
         name: name.length > 20 ? name.substring(0, 20) + '...' : name,
         fullName: name,
-        catalogMarginPercent: ((s.totalPrecio - s.totalCosto) / s.totalPrecio) * 100,
+        catalogMarginPercent: s.totalProducts > 0 ? (s.sumOfMarginPercents / s.totalProducts) : 0,
         totalProducts: s.totalProducts,
         products: s.products.sort((a, b) => {
           const m1 = a.precio > 0 ? ((a.precio - a.costo) / a.precio) * 100 : 0;
@@ -401,8 +485,8 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
       .sort((a, b) => b.catalogMarginPercent - a.catalogMarginPercent);
 
     const calculatedWeeklySales = (() => {
-      if (ventas.length === 0) return weeklySales;
-      const sortedVentas = [...ventas].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (filteredVentas.length === 0) return weeklySales;
+      const sortedVentas = [...filteredVentas].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const latestDate = new Date(sortedVentas[0].date);
       const fourWeeksAgo = new Date(latestDate);
       fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
@@ -414,7 +498,7 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
     const flujoComercial = (() => {
       const today = new Date();
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const ventasMes = ventas.filter(v => new Date(v.date) >= firstDayOfMonth);
+      const ventasMes = filteredVentas.filter(v => new Date(v.date) >= firstDayOfMonth);
       const vendido = ventasMes.reduce((sum, v) => sum + (v.quantity * v.unit_price), 0);
       const ordenesMes = ordenes.filter(o => new Date(o.created_at) >= firstDayOfMonth && o.status !== 'Pendiente');
       
@@ -436,12 +520,12 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
     })();
 
     return {
-      totalRevenue, totalCost, totalMargin, marginPercent, ticketAvg, totalTransactions: totalTransactions.size,
+      totalRevenue, totalCost, totalMargin, marginPercent, globalCatalogMarginPercent, ticketAvg, totalTransactions: totalTransactions.size,
       productStats, categoryStats, brandStats, hourlyStats, dayOfWeekStats, staffStats, brandCatalogStats, timeStats,
       topMovers, topMargin, categoryData, allBrandsData, brandData, allProductsData, brandCatalogData,
       trendData, hourlyData, daysData, staffData, inventoryDays, deadStock, pricingAnomalies,
       calculatedWeeklySales, flujoComercial, posRevenue, backendRevenue,
       sessionSummaries: Object.values(sessionSummaries).sort((a, b) => new Date(b.maxDate).getTime() - new Date(a.maxDate).getTime())
     };
-  }, [ventas, inventario, ordenes, timeGrouping, weeklySales]);
+  }, [filteredVentas, ventas, inventario, ordenes, timeGrouping, weeklySales]);
 }

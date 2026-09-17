@@ -19,6 +19,7 @@ import OrdersPanel from './components/OrdersPanel';
 import { SupplierHub } from './components/suppliers/SupplierHub';
 import AgendaHub from './components/AgendaHub';
 import PedidosTerminal from './components/pedidos/PedidosTerminal';
+import DoctorPortal from './components/DoctorPortal';
 
 export default function App() {
   const navigate = useNavigate();
@@ -55,6 +56,16 @@ export default function App() {
     return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500" /></div>;
   }
 
+  // === RUTAS PÚBLICAS SIN AUTENTICACIÓN ===
+  if (currentPath === 'portal-medico') {
+    return (
+      <Routes>
+        <Route path="/portal-medico" element={<DoctorPortal />} />
+      </Routes>
+    );
+  }
+
+  // === AUTENTICACIÓN REQUERIDA ===
   if (!session) return <LoginScreen />;
 
   // Seguridad estricta: Si el usuario es de caja, NUNCA dejarlo ver el resto del sistema

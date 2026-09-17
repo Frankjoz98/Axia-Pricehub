@@ -214,6 +214,17 @@ export interface Meta {
 export type TipoPedido = 'encargo_cliente' | 'sugerencia' | 'esencial' | 'quiebre_stock';
 export type EstadoPedido = 'pendiente' | 'pedido' | 'recibido' | 'archivado';
 
+export type EstadoCita = 'pendiente' | 'atendido' | 'cancelado';
+
+export interface CitaMedica {
+  id: string;
+  paciente: string;
+  fecha: string; // YYYY-MM-DD
+  hora: string;
+  estado: EstadoCita;
+  created_at: string;
+}
+
 export interface PedidoSugerido {
   id: string;
   producto_nombre: string;
