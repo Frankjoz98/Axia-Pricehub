@@ -45,7 +45,7 @@ export default function InventoryHub({
           onClick={() => setActiveTab('deadstock')} 
           className={cn("flex-1 px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all", activeTab === 'deadstock' ? "bg-violet-600 text-white shadow-md shadow-violet-500/25" : "text-slate-500 hover:bg-slate-50")}
         >
-          <AlertCircle className="w-4 h-4" /> Productos Estancados
+          <AlertCircle className="w-4 h-4" /> Inventario & Promoción
         </button>
       </div>
 

@@ -12,50 +12,46 @@ interface DeadStockProps {
 export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const deadStock = useMemo(() => {
+  const processedInventory = useMemo(() => {
     if (!inventario || inventario.length === 0) return [];
     
-    const soldNames = new Set<string>();
-    const soldRefs = new Set<string>();
+    const nameSales = new Map<string, number>();
+    const refSales = new Map<string, number>();
     
-    const allSalesText = ventas.map(v => v.product_name?.toLowerCase().trim() || '').join(' | ');
-
     ventas.forEach(v => {
       if (!v.product_name) return;
       const lowerProduct = v.product_name.toLowerCase().trim();
-      soldNames.add(lowerProduct);
+      nameSales.set(lowerProduct, (nameSales.get(lowerProduct) || 0) + 1);
       
-      // Fast check for starting reference
       if (lowerProduct.startsWith('[')) {
         const endIdx = lowerProduct.indexOf(']');
         if (endIdx > 1) {
-          soldRefs.add(lowerProduct.substring(1, endIdx).trim());
+          const ref = lowerProduct.substring(1, endIdx).trim();
+          refSales.set(ref, (refSales.get(ref) || 0) + 1);
         }
       }
     });
 
-    const results = inventario.filter(item => {
-       if (item.stock <= 0) return false;
+    const results = inventario.filter(item => item.stock > 0).map(item => {
        const nameMatch = item.product_name.toLowerCase().trim();
        const refMatch = item.referencia ? item.referencia.toLowerCase().trim() : '';
        
-       // Si el nombre exacto se vendió o la referencia se vendió
-       let hasSold = soldNames.has(nameMatch) || (refMatch && soldRefs.has(refMatch));
-       
-       // Fuzzy match extra: rápida búsqueda en el string combinado
-       if (!hasSold && refMatch) {
-         if (allSalesText.includes(`[${refMatch}]`) || allSalesText.includes(`${refMatch} `)) {
-           hasSold = true;
-         }
+       let salesCount = nameSales.get(nameMatch) || 0;
+       if (salesCount === 0 && refMatch) {
+         salesCount = refSales.get(refMatch) || 0;
        }
-
-       return !hasSold;
+       
+       return { ...item, salesCount };
     });
 
-    return results.sort((a, b) => b.stock - a.stock);
+    return results.sort((a, b) => {
+      if (a.impulso_medico && !b.impulso_medico) return -1;
+      if (!a.impulso_medico && b.impulso_medico) return 1;
+      return b.stock - a.stock;
+    });
   }, [inventario, ventas]);
 
-  const filtered = deadStock.filter(item => 
+  const filtered = processedInventory.filter(item => 
     item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (item.referencia && item.referencia.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -77,12 +73,12 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-rose-100 relative overflow-hidden flex items-center justify-between">
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-rose-50 rounded-full text-xs font-bold tracking-wider mb-2 text-rose-600 uppercase border border-rose-100">
-            <AlertOctagon className="w-3.5 h-3.5" /> Dinero Estancado
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-violet-50 rounded-full text-xs font-bold tracking-wider mb-2 text-violet-600 uppercase border border-violet-100">
+            <AlertOctagon className="w-3.5 h-3.5" /> Listado Completo
           </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-1">Inventario de Lento Movimiento</h2>
+          <h2 className="text-2xl font-black text-slate-900 mb-1">Inventario & Promoción</h2>
           <p className="text-slate-500 text-sm">
-            Hay <strong className="text-rose-500">{deadStock.length} productos</strong> ocupando espacio físico sin generar ventas.
+            Hay <strong>{processedInventory.length} productos</strong> en stock. Selecciona con la estrella los que quieras promover.
           </p>
         </div>
         <div className="hidden sm:block text-rose-100 mr-4">
@@ -108,7 +104,7 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
           {filtered.length === 0 ? (
             <div className="p-12 text-center text-slate-500">
               <PackageX className="w-12 h-12 mx-auto opacity-20 mb-3" />
-              <p className="font-medium">No se encontraron productos estancados con ese nombre.</p>
+              <p className="font-medium">No se encontraron productos con ese nombre.</p>
             </div>
           ) : (
             <table className="w-full text-left text-sm">
@@ -116,7 +112,8 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
                 <tr>
                   <th className="p-4">Referencia</th>
                   <th className="p-4">Producto</th>
-                  <th className="p-4 text-center">Unidades Físicas (A Mano)</th>
+                  <th className="p-4 text-center">Unidades (Físico)</th>
+                  <th className="p-4 text-center">Rotación</th>
                   <th className="p-4 text-center">Impulso Médico</th>
                 </tr>
               </thead>
@@ -126,9 +123,16 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
                     <td className="p-4 font-mono text-slate-500">{item.referencia || '-'}</td>
                     <td className="p-4 font-bold text-slate-900">{item.product_name}</td>
                     <td className="p-4 text-center">
-                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1 rounded-full font-black text-sm border border-rose-100">
+                      <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-black text-sm border border-slate-200">
                         <TrendingDown className="w-4 h-4" /> {item.stock}
                       </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      {(item as any).salesCount > 0 ? (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-100">{(item as any).salesCount} ventas</span>
+                      ) : (
+                        <span className="text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">Sin ventas</span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       <button 
