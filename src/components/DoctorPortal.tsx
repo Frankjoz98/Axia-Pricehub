@@ -8,7 +8,6 @@ export default function DoctorPortal() {
   const [activeTab, setActiveTab] = useState<'citas' | 'catalogo'>('citas');
   const [searchTerm, setSearchTerm] = useState('');
   const [medicamentos, setMedicamentos] = useState<any[]>([]);
-  const [soldProducts, setSoldProducts] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
   const { citas, updateEstado } = useCitas(selectedDate);
