@@ -81,6 +81,7 @@ export interface OdooInventario {
   stock: number;
   categoria?: string;
   fecha_vencimiento?: string;
+  impulso_medico?: boolean;
   updated_at?: string;
 }
 

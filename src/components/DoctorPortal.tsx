@@ -15,34 +15,20 @@ export default function DoctorPortal() {
 
   useEffect(() => {
     // Read-only query to fetch public data for the impulse catalog
-    const fetchCatalogAndSales = async () => {
-      // Calcular fecha límite: últimos 60 días
-      const limitDate = new Date();
-      limitDate.setDate(limitDate.getDate() - 60);
-      const limitDateString = limitDate.toISOString().split('T')[0];
-
-      const [invRes, ventasRes] = await Promise.all([
-        supabase
-          .from('inventario_local')
-          .select('odoo_id, product_name, stock, precio, marca')
-          .gt('stock', 0)
-          .order('stock', { ascending: false })
-          .limit(3000),
-        supabase
-          .from('ventas_historicas')
-          .select('product_name')
-          .gte('date', limitDateString)
-      ]);
+    const fetchCatalog = async () => {
+      const { data } = await supabase
+        .from('inventario_local')
+        .select('odoo_id, product_name, stock, marca')
+        .eq('impulso_medico', true)
+        .gt('stock', 0)
+        .order('stock', { ascending: false })
+        .limit(200);
       
-      if (ventasRes.data) {
-        setSoldProducts(new Set(ventasRes.data.map(v => v.product_name)));
-      }
-      
-      if (invRes.data) {
-        setMedicamentos(invRes.data);
+      if (data) {
+        setMedicamentos(data);
       }
     };
-    fetchCatalogAndSales();
+    fetchCatalog();
   }, []);
 
   const blacklistedBrands = ['cdn', 'coca cola', 'pepsi', 'diana', 'frito-lay', 'frito lay', 'eskimo', 'kerns', 'kern\'s', 'gatorade', 'powerade', 'monster', 'red bull'];
@@ -53,12 +39,6 @@ export default function DoctorPortal() {
     const matchesSearch = (m.product_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     return !isExcluded && matchesSearch;
-  }).map(m => {
-    return { ...m, isDeadStock: !soldProducts.has(m.product_name) };
-  }).sort((a, b) => {
-    if (a.isDeadStock && !b.isDeadStock) return -1;
-    if (!a.isDeadStock && b.isDeadStock) return 1;
-    return b.stock - a.stock;
   });
 
   return (
@@ -146,19 +126,15 @@ export default function DoctorPortal() {
             <div className="space-y-3 pt-2">
               {filteredMedicamentos.map((med, i) => (
                 <div key={med.odoo_id || i} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-2 relative overflow-hidden">
-                  <div className={cn("absolute top-0 left-0 w-1.5 h-full", med.isDeadStock ? "bg-rose-500" : "bg-amber-400")} />
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500" />
                   <div className="flex justify-between items-start">
                     <h3 className="font-black text-slate-800 pr-26 leading-snug">{med.product_name}</h3>
-                    <span className={cn(
-                      "absolute top-4 right-4 text-[10px] font-black uppercase px-2.5 py-1 rounded-full flex items-center gap-1",
-                      med.isDeadStock ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                    )}>
-                      <Flame className="w-3 h-3" /> {med.isDeadStock ? 'ALTA PRIORIDAD' : 'Sugerido'}
+                    <span className="absolute top-4 right-4 text-[10px] font-black uppercase px-2.5 py-1 rounded-full flex items-center gap-1 bg-rose-100 text-rose-700">
+                      <Flame className="w-3 h-3" /> IMPULSO
                     </span>
                   </div>
                   <div className="flex justify-between items-end mt-2">
                     <p className="text-xs text-slate-500 font-bold bg-slate-50 px-2 py-1 rounded">Stock: {med.stock || 0} u.</p>
-                    <p className="text-amber-600 font-black text-lg">C$ {(med.precio || 0).toFixed(2)}</p>
                   </div>
                 </div>
               ))}

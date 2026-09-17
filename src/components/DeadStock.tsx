@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { OdooInventario, VentaHistorica } from '../types';
-import { Ghost, PackageX, Search, TrendingDown, AlertOctagon } from 'lucide-react';
+import { Ghost, PackageX, Search, TrendingDown, AlertOctagon, Star } from 'lucide-react';
+import { supabase } from '../supabase';
+import { cn } from '../lib/utils';
 
 interface DeadStockProps {
   inventario?: OdooInventario[];
@@ -58,6 +60,19 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
     (item.referencia && item.referencia.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const [toggling, setToggling] = useState<string | null>(null);
+  const handleToggleImpulso = async (item: OdooInventario) => {
+    if (!item.id) return;
+    setToggling(item.id);
+    const newValue = !item.impulso_medico;
+    
+    // Optimistic update mutating the prop (React might not re-render immediately if we don't update state, but this is a simple local mutation just for visual feedback until next fetch)
+    item.impulso_medico = newValue;
+    
+    await supabase.from('inventario_local').update({ impulso_medico: newValue }).eq('id', item.id);
+    setToggling(null);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-rose-100 relative overflow-hidden flex items-center justify-between">
@@ -102,7 +117,7 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
                   <th className="p-4">Referencia</th>
                   <th className="p-4">Producto</th>
                   <th className="p-4 text-center">Unidades Físicas (A Mano)</th>
-                  <th className="p-4 text-center">Ventas Históricas</th>
+                  <th className="p-4 text-center">Impulso Médico</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -116,7 +131,19 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      <span className="text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">0 vendidas</span>
+                      <button 
+                        onClick={() => handleToggleImpulso(item)}
+                        disabled={toggling === item.id}
+                        className={cn("p-2 rounded-full transition-colors", 
+                          item.impulso_medico 
+                            ? "text-amber-500 bg-amber-50 hover:bg-amber-100" 
+                            : "text-slate-300 hover:text-amber-500 hover:bg-slate-50",
+                          toggling === item.id && "opacity-50 cursor-not-allowed"
+                        )}
+                        title="Marcar para Impulso Médico"
+                      >
+                        <Star className={cn("w-5 h-5", item.impulso_medico && "fill-amber-500")} />
+                      </button>
                     </td>
                   </tr>
                 ))}
