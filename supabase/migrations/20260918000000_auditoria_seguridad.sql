@@ -97,10 +97,10 @@ END $$;
 --    El rol anon NO tiene privilegios sobre ninguna tabla ni vista. Solo puede invocar
 --    tres funciones SECURITY DEFINER que exigen el token guardado en `configuracion.portal_token`.
 --    El médico recibe un enlace del tipo https://<app>/portal-medico?k=<token>.
---    Para rotar el acceso: UPDATE configuracion SET portal_token = encode(gen_random_bytes(18),'hex');
+--    Para rotar el acceso: UPDATE configuracion SET portal_token = md5(random()::text || clock_timestamp()::text);
 -- ------------------------------------------------------------
 ALTER TABLE public.configuracion
-  ADD COLUMN IF NOT EXISTS portal_token text NOT NULL DEFAULT encode(gen_random_bytes(18), 'hex');
+  ADD COLUMN IF NOT EXISTS portal_token text NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text);
 
 CREATE OR REPLACE FUNCTION public.portal_token_valido(p_token text)
 RETURNS boolean
@@ -132,16 +132,17 @@ $$;
 
 -- b) Citas del día
 CREATE OR REPLACE FUNCTION public.portal_citas(p_token text, p_fecha date)
-RETURNS TABLE (id uuid, paciente text, fecha date, hora text, estado text, created_at timestamptz)
+RETURNS TABLE (id uuid, paciente text, fecha text, hora text, estado text, created_at timestamptz)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT c.id, c.paciente, c.fecha, c.hora, c.estado, c.created_at
+  -- Casts explícitos: funciona aunque la tabla real guarde fecha/hora como date/time o como text
+  SELECT c.id, c.paciente, c.fecha::text, c.hora::text, c.estado, c.created_at
   FROM public.citas_medicas c
-  WHERE public.portal_token_valido(p_token) AND c.fecha = p_fecha
-  ORDER BY c.hora;
+  WHERE public.portal_token_valido(p_token) AND c.fecha::date = p_fecha
+  ORDER BY c.hora::text;
 $$;
 
 -- c) Cambiar SOLO el estado de una cita
