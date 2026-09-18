@@ -122,24 +122,15 @@ Axia PriceHub es un sistema diseñado para la gestión inteligente de inventario
 - No se manejarán múltiples almacenes o bodegas; el sistema asume un inventario local unificado.
 
 ## 7. Estado Actual (Handoff)
-- **Framework:** React + TypeScript + TailwindCSS v4.
-- **Base de Datos:** Supabase con tablas `inventario_local`, `ventas_historicas`, `ordenes_compra` y `pedidos_dependientes`.
+- **Framework:** React 19 + TypeScript 6 + TailwindCSS v4 + Vite 8. Tests con Vitest (`npm test`).
+- **Base de Datos:** Supabase. Tablas: `productos`, `ventas_historicas`, `inventario_local`, `configuracion` (incluye `portal_token`), `ordenes_compra` (con columnas de conciliación), `proveedores`, `facturas_compra`, `fichas_tecnicas`, `agenda_eventos`, `bitacora_avances`, `metas`, `pedidos_sugeridos`, `citas_medicas`, `perfiles`. Migraciones en `supabase/migrations/`; scripts históricos en `supabase/schema_legacy/`.
+- **Seguridad:** RLS por rol (`auth_rol()`); portal médico por token vía RPC; Gemini detrás de `netlify/functions/ai.mts`. Ver RF-67..RF-71.
 - **Arquitectura de Hubs:**
-  - `App.tsx` maneja el enrutamiento y protege de forma estricta a los usuarios (aislando a `caja@axia.com` en su propio submódulo).
-  - `InventoryHub`, `IntelligenceHub`, `SupplierHub` y `OrdersPanel` (ahora con modo embebido para la Terminal de Pedidos).
-  - `IntelligenceHub.tsx` (37KB, 583 líneas) es el componente activo de inteligencia de negocios usado en producción. Contiene todas las vistas (Overview, Time, Labs, Staff, Lupa, Alerts, Restock) en un solo archivo monolítico. **Este es el próximo candidato a refactorización.**
-  - `SupplierHub` ya está modularizado en `src/components/suppliers/`.
-- **Módulo Reciente (Pedidos):**
-  - `PedidosTerminal.tsx` implementado con interfaz optimista (Optimistic UI) para interacciones en tiempo real.
-  - Aislado para dependientes (`/pedidos`) e incrustable para administradores.
-- **Módulos Complementarios:**
-  - `SmartRestock.tsx`: Motor de reabastecimiento inteligente (Axia AI).
-  - `PurchaseAnalytics.tsx`: Analíticas de compras con varianza histórica.
-  - `PrintableReport.tsx`: Componente dedicado a la impresión de reportes gerenciales en PDF.
-  - `DataAuditorModal.tsx`: Modal de auditoría de datos crudos.
-- **Código Muerto Identificado:**
-  - `Reports.tsx` (12KB) — fue refactorizado pero **no está siendo importado por ningún componente**. No se usa en producción. Puede eliminarse o reutilizarse.
-  - `ReportsOld.txt` (68KB) — backup del Reports.tsx original, sin uso.
-  - `src/components/intelligence/` — contiene 7 subcomponentes (OverviewView, TimeView, BrandView, ProductsView, StaffView, InventoryView, ProductDetailModal) creados durante la refactorización de Reports.tsx, pero **ninguno está conectado al flujo activo** de `IntelligenceHub.tsx`.
+  - `App.tsx` enruta y aísla visualmente al rol `caja`; `AppContext` expone `rol` y `weeklySalesEfectivo`.
+  - `InventoryHub` (Catálogo, Botiquín/Proforma, Inventario & Promoción), `IntelligenceHub` (Resumen, Horas, Laboratorios, Personal, Lupa, Cierres, Alertas, Axia AI Restock), `SupplierHub`, `AgendaHub`, `OrdersPanel` (A Proveedores, Desde Caja, Analíticas).
+  - `IntelligenceHub.tsx` ya está modularizado en `src/components/intelligence/` (OverviewTab, TimeTab, LabsTab, LupaTab, CierresTab, ReportExportModal); toda la lógica numérica vive en `useBusinessMetrics`.
+- **Librerías de dominio (`src/lib/`):** `dates.ts` (hora local), `odoo.ts` (cruce ventas ↔ inventario), `facturas.ts` (vencimientos), `csv.ts` (lectura Odoo), `ai.ts` (cliente de `/api/ai`), `pdf.ts`, `agendaRules.ts`, `utils.ts` (`toDbProduct`, `errorMessage`).
+- **Portal médico:** `DoctorPortal.tsx` + `usePortalMedico.ts` (RPC `portal_catalogo_impulso`, `portal_citas`, `portal_actualizar_cita`).
+- **Código eliminado en la auditoría de 2026-09-18:** `Reports.tsx`/`ReportsOld.txt` (ya no existían), `src/main.ts`, `src/counter.ts`, `AIBriefing.tsx`, `generateDailyBriefing`, `src/data/productos.json`, assets de la plantilla Vite.
+- **Pendientes conocidos:** verificar con datos reales que los `odoo_id` de inventario (`product_template`) y de ventas (`product_product`) coinciden (ver comentario en `src/lib/odoo.ts`); el "MEJOR" precio del catálogo compara `netPrice` sin considerar bonificaciones (decisión de negocio pendiente).
 - **Flujo Estandarizado:** Toda nueva sesión debe respetar las convenciones de SDD (consultar este archivo y `AGENTS.md`) antes de modificar código.
-

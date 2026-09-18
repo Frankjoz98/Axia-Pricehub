@@ -1,0 +1,4 @@
+nombre_producto,ingrediente_activo,categoria,nivel,proveedor,codigo_proveedor,precio_base,descuento_porcentaje,precio_neto,escala_compra,escala_regalo
+Dolo Neurobion XR,Diclofenaco + Vitaminas,Neurología,1,DICEGSA,DIC-100,50.00,10,45.00,12,1
+Nebilet 5mg,Nebivolol,Cardiología,2,LETERAGO,LET-200,30.00,0,30.00,0,0
+Umbrella Gel,Filtro Solar UVA,Dermatología,3,DIDELSA,DID-300,100.00,15,85.00,5,1

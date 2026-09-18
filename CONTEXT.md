@@ -1,7 +1,7 @@
 # Axia PriceHub Pro — Ficha Técnica y Contexto del Proyecto
 
-> **Última actualización:** 29 de Agosto 2026, 3:00 AM (GMT-6)
-> **Versión:** 3.0 (Fase 5 Completada)
+> **Última actualización:** 18 de Septiembre 2026 (auditoría de lógica)
+> **Versión:** 3.1
 > **Estado:** ✅ Producción (Netlify + Supabase)
 
 ---
@@ -37,13 +37,14 @@
 - **Proyecto:** `axia pricehub`
 - **Project ID:** `svylytekfqhzuiouzral`
 - **URL:** `https://svylytekfqhzuiouzral.supabase.co`
-- **Anon Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2eWx5dGVrZnFoenVpb3V6cmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NzE1NjgsImV4cCI6MjEwMzU0NzU2OH0.XwObTR46eJViuNycNGZkfFdwLLdVaFkysu-sa851-WY`
+- **Anon Key:** en `.env.local` (`VITE_SUPABASE_ANON_KEY`); no se transcribe en documentos versionados
 - **Correo de cuenta:** `farmaxia26@gmail.com`
 - **Auth:** Email/Password, registro público desactivado, RLS habilitado en todas las tablas.
+- **Roles:** tabla `perfiles` (`admin` | `caja`) + función `auth_rol()`. Las tablas sensibles solo son accesibles al rol `admin`; `caja@axia.com` solo ve la terminal de pedidos y citas. Un usuario sin perfil es `caja`.
 
 ### Netlify
 - **Cuenta:** Personal de Frank Conrado
-- **Método de deploy:** Netlify Drop (arrastrar carpeta `dist`)
+- **Método de deploy:** build desde git (`netlify.toml`: `npm run build`, funciones en `netlify/functions/`). Variables requeridas en Netlify: `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
 - **URL original:** `https://illustrious-lebkuchen-5ac15a.netlify.app` (puede haberse renombrado)
 
 ---
@@ -111,33 +112,21 @@ Todas las tablas tienen Row Level Security habilitado. Solo los usuarios autenti
 
 ## 5. Arquitectura del Frontend
 
-```
-d:/Novarix/Axia PriceHub/
-├── public/
-│   └── plantilla_maestra_axia.csv   ← Plantilla descargable para importar catálogos
-├── src/
-│   ├── App.tsx                      ← Orquestador principal (~160 líneas)
-│   ├── components/
-│   │   ├── LoginScreen.tsx          ← Pantalla de autenticación
-│   │   ├── Dashboard.tsx            ← Tab "Resumen" — Barras de presupuesto dinámicas
-│   │   ├── Catalog.tsx              ← Tab "Catálogo" — Filtros por Nivel + Proveedor
-│   │   ├── Reports.tsx              ← Tab "Reportes" — Gráficas Recharts + KPIs
-│   │   ├── SettingsPanel.tsx        ← Tab "Ajustes" — Importadores + Personalización
-│   │   ├── CartDrawer.tsx           ← Drawer lateral del carrito de pedidos
-│   │   └── ProductEditor.tsx        ← Modal para editar ofertas de un producto
-│   ├── lib/
-│   │   └── utils.ts                 ← cn(), formatCurrency(), exportCartToCSV(), etc.
-│   ├── types/
-│   │   └── index.ts                 ← Interfaces: UnifiedProduct, CartItem, AppConfig, VentaHistorica
-│   ├── supabase.ts                  ← Cliente de Supabase (usa .env.local)
-│   └── main.tsx                     ← Entry point de React
-├── .env.local                       ← VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-├── schema.sql                       ← Schema original (tabla productos + datos iniciales)
-├── schema_v2.sql                    ← Auth RLS + tabla ventas_historicas
-├── schema_v3.sql                    ← Tabla configuracion
-├── dist/                            ← Build de producción (se arrastra a Netlify)
-└── package.json
-```
+Ver `README.md` para el árbol completo. Piezas clave:
+
+| Ruta | Rol |
+|---|---|
+| `src/App.tsx` | Enrutador. `/portal-medico` es público; `/pedidos` y el rol `caja` quedan aislados en `PedidosTerminal`. |
+| `src/context/AppContext.tsx` | Sesión, `rol`, datos (productos, ventas, inventario, órdenes, proveedores, facturas), `weeklySalesEfectivo` (única fuente del presupuesto). No descarga datos para `caja`. |
+| `src/hooks/useBusinessMetrics.ts` | Motor analítico: sesiones sobre el histórico completo, turnos 06/14/22, día operativo local, tickets únicos, stock muerto, anomalías, flujo comercial. `PrintableReport` lo consume. |
+| `src/lib/dates.ts` | `todayYMD`, `toLocalYMD`, `parseLocalYMD`, `daysUntil`… Prohibido `toISOString().split('T')` y `new Date('YYYY-MM-DD')`. |
+| `src/lib/odoo.ts` | `buildInventarioIndex` / `normalizeOdooId` / `lineCost`: único cruce ventas ↔ inventario. |
+| `src/lib/facturas.ts`, `src/lib/csv.ts` | Facturas vencidas/pendientes; lectura tolerante de CSV de Odoo. |
+| `src/hooks/usePortalMedico.ts` | Portal médico vía RPC `portal_*` con token. |
+| `netlify/functions/ai.mts` | Proxy a Gemini; valida el JWT de Supabase. |
+| `supabase/migrations/` | Migraciones versionadas. `20260918000000_auditoria_seguridad.sql` crea roles, RLS por rol, columnas faltantes y el portal por token. |
+
+Tests: `npm test` (Vitest) cubre `lib/dates`, `lib/odoo`, `lib/facturas`, `lib/csv` y `useBusinessMetrics`.
 
 ---
 
@@ -207,7 +196,10 @@ d:/Novarix/Axia PriceHub/
 1. **Odoo es solo para ventas.** Nunca conectar la app directamente a Odoo. Los datos de inventario de Odoo no son confiables (problema de lotes).
 2. **El campo `offers` en `productos` es JSONB.** Esto permite flexibilidad total para agregar proveedores sin cambiar el esquema, pero requiere UPSERT del objeto completo al editar.
 3. **Optimización de Memoria (DOM Cap):** `Catalog.tsx` utiliza `.toLowerCase().includes()` con normalización de tildes (NFD) en lugar de librerías de indexación pesadas, y un límite estricto de `.slice(0, 100)` para evitar colapsos de RAM (OOM) en dispositivos móviles.
-4. **Scripts de Conversión de Catálogos:** En la raíz del proyecto existen scripts como `convert_dicegsa.mjs`, `convert_paisas.py`, y `convert_paisas.js` que se usaron para estructurar listas complejas de proveedores y extraer OCR desde PDFs hacia formato CSV para su subida mediante el componente `SettingsPanel`.
+4. **Scripts de Conversión de Catálogos:** viven en `scripts/convert/` (`convert_dicegsa.mjs`, `convert_paisas.py`, etc.). Los scripts de debug y los CSV de trabajo van a `tmp/` (ignorado) y nunca a `public/` (todo lo que está en `public/` se sirve sin login).
 5. **El caché de la PWA puede ocultar actualizaciones.** Si el usuario sube un nuevo `dist` a Netlify y no ve cambios, debe usar el botón "Forzar Actualización" en Ajustes o presionar `Ctrl+F5`.
 6. **El margen en `ventas_historicas` es una columna GENERATED.** No se puede escribir directamente; se calcula automáticamente como `(unit_price * quantity) - total_cost`.
+7. **Snapshot de inventario con preservación:** la subida de inventario hace `upsert` por `odoo_id` y conserva `impulso_medico`, `fecha_vencimiento` y el `id` interno; solo elimina los productos que ya no vienen en el CSV (RF-1).
 8. **Proveedores sin lista de precios fija (ej. PAISAS):** Se importan con precio `0.00`. La interfaz en `Catalog.tsx` los identifica automáticamente mostrando una insignia **"Consultar / En stock"** en lugar de C$ 0.00, y no los califica erróneamente como "MEJOR" precio sobre proveedores con precios reales. Permite agregarlos al carrito para cotizar por WhatsApp.
+9. **Zona horaria:** la farmacia opera en UTC-6 y es 24/7. Todo cálculo de "día" es local (`src/lib/dates.ts`); el día operativo de una sesión nocturna es el día en que abrió (RF-50).
+10. **Portal médico:** enlace `/portal-medico?k=<token>` (token en `configuracion.portal_token`, visible en Ajustes). Para revocar: rotar el token en la base de datos.

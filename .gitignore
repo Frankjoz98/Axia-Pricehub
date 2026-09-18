@@ -31,3 +31,9 @@ test_unzip/
 *.sln
 *.sw?
 
+
+# Temporales locales (scripts de debug, CSV de trabajo)
+tmp/
+
+# La plantilla oficial de importacion si se versiona
+!public/plantilla_maestra_axia.csv

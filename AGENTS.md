@@ -7,9 +7,11 @@ Axia PriceHub es un sistema de cotizacion, inteligencia de negocios y sincroniza
 ## Comandos
 
 - Iniciar Servidor:
-  pm run dev
+  npm run dev
 - Compilar:
-  pm run build
+  npm run build
+- Tests:
+  npm test
 
 ## Estilo y convenciones
 

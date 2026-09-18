@@ -173,13 +173,6 @@ export interface AgendaEvento {
   updated_at?: string;
 }
 
-export interface DailyBriefing {
-  greeting: string;
-  topPriorities: string[];
-  insights: string[];
-  suggestedActions: string[];
-}
-
 export type CategoriaBitacora = 'general' | 'operativo' | 'comercial' | 'reunion' | 'sistema';
 
 export interface BitacoraEntry {

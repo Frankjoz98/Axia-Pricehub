@@ -1,7 +1,4 @@
 import { supabase } from '../supabase';
-import type { AgendaEvento, DailyBriefing } from '../types';
-import type { BusinessMetrics } from '../hooks/useBusinessMetrics';
-import type { AppAlert } from '../context/AlertsContext';
 
 export interface FichaTecnica {
   product_id: string;
@@ -127,64 +124,6 @@ Ejemplo de respuesta:
     };
   } catch (error) {
     console.error("Error auditando la orden con IA:", error);
-    return null;
-  }
-}
-
-export async function generateDailyBriefing(
-  eventos: AgendaEvento[],
-  metrics: Pick<BusinessMetrics, 'totalRevenue' | 'marginPercent' | 'totalTransactions'> | null,
-  alertas: Pick<AppAlert, 'title' | 'message'>[]
-): Promise<DailyBriefing | null> {
-  const activeEventsStr = eventos.filter(e => !e.completado).map(e =>
-    `[${e.prioridad.toUpperCase()}] ${e.tipo}: ${e.titulo} - ${e.descripcion || ''}`
-  ).join('\n');
-
-  const alertsStr = alertas.map(a => `- ${a.title}: ${a.message}`).join('\n');
-
-  const prompt = `Eres el asistente de Inteligencia de Negocios de "Axia PriceHub", un sistema para farmacias en Nicaragua.
-Tu tarea es generar un "Briefing Diario" conciso y directo para el dueño de la farmacia al comenzar su día.
-
-DATOS DEL DÍA:
-Eventos en la agenda:
-${activeEventsStr || 'Ningún evento programado.'}
-
-Alertas activas del sistema:
-${alertsStr || 'Sin alertas.'}
-
-Métricas recientes:
-Total Facturado (último periodo): C$ ${metrics?.totalRevenue || 0}
-Margen Global: ${metrics?.marginPercent?.toFixed(1) || 0}%
-Tickets: ${metrics?.totalTransactions || 0}
-
-INSTRUCCIONES:
-Basado en esta información, devuelve un JSON estricto con:
-1. "greeting": Un saludo breve que resuma el estado del día (ej. "Buenos días. Hoy es un día crucial con 2 pagos vencidos.").
-2. "topPriorities": Array de strings (max 3) con las prioridades absolutas extraídas de la agenda y alertas (ej. "Pagar factura #123 de DICEGSA", "Resolver alerta de quiebre de stock").
-3. "insights": Array de strings (max 2) con un análisis breve de las métricas de negocio.
-4. "suggestedActions": Array de strings (max 2) con recomendaciones tácticas sobre qué hacer hoy.
-
-Ejemplo JSON:
-{
-  "greeting": "Buenos días. Tienes un día enfocado en pagos y reabastecimiento.",
-  "topPriorities": ["Pagar factura de 15,000 C$ a Leterago hoy", "Preparar pedido para Caplin"],
-  "insights": ["El margen global bajó levemente al 24%, revisa los descuentos aplicados ayer."],
-  "suggestedActions": ["Reabastece Amoxicilina urgente", "Llama a tu ejecutivo de ventas de Leterago para negociar plazos."]
-}
-`;
-
-  try {
-    const parsed = await callGemini<Partial<DailyBriefing>>(prompt, 0.3);
-    if (!parsed) return null;
-
-    return {
-      greeting: parsed.greeting || "Buenos días.",
-      topPriorities: parsed.topPriorities || [],
-      insights: parsed.insights || [],
-      suggestedActions: parsed.suggestedActions || []
-    };
-  } catch (error) {
-    console.error("Error generating daily briefing con IA:", error);
     return null;
   }
 }
