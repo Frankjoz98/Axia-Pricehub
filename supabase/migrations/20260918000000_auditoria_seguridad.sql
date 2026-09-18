@@ -97,10 +97,10 @@ END $$;
 --    El rol anon NO tiene privilegios sobre ninguna tabla ni vista. Solo puede invocar
 --    tres funciones SECURITY DEFINER que exigen el token guardado en `configuracion.portal_token`.
 --    El médico recibe un enlace del tipo https://<app>/portal-medico?k=<token>.
---    Para rotar el acceso: UPDATE configuracion SET portal_token = md5(random()::text || clock_timestamp()::text);
+--    Para rotar el acceso: UPDATE configuracion SET portal_token = replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
 -- ------------------------------------------------------------
 ALTER TABLE public.configuracion
-  ADD COLUMN IF NOT EXISTS portal_token text NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text);
+  ADD COLUMN IF NOT EXISTS portal_token text NOT NULL DEFAULT replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
 
 CREATE OR REPLACE FUNCTION public.portal_token_valido(p_token text)
 RETURNS boolean
