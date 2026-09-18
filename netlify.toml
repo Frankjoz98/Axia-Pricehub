@@ -9,3 +9,10 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# El portal médico nunca debe filtrar su URL (ni el token inicial) a terceros
+[[headers]]
+  for = "/portal-medico*"
+  [headers.values]
+    Referrer-Policy = "no-referrer"
+    X-Robots-Tag = "noindex, nofollow"

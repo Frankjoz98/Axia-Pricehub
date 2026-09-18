@@ -1,17 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Stethoscope, CheckCircle, Flame, ShieldAlert } from 'lucide-react';
 import { usePortalMedico } from '../hooks/usePortalMedico';
 import { cn } from '../lib/utils';
 import { todayYMD } from '../lib/dates';
 
+const PORTAL_TOKEN_KEY = 'axia_portal_token';
+
 export default function DoctorPortal() {
   const [activeTab, setActiveTab] = useState<'citas' | 'catalogo'>('citas');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState(todayYMD());
-  const [searchParams] = useSearchParams();
-  // El enlace del médico lleva el token de acceso: /portal-medico?k=<configuracion.portal_token>
-  const token = searchParams.get('k');
+  const [searchParams, setSearchParams] = useSearchParams();
+  // El enlace del médico lleva el token de acceso una sola vez (/portal-medico?k=<token>).
+  // Se guarda en sessionStorage y se retira de la URL para que no quede en historial ni en Referer;
+  // las llamadas RPC lo envían en el cuerpo POST, nunca en la query string.
+  const [token] = useState<string | null>(() => {
+    const fromUrl = searchParams.get('k');
+    try {
+      if (fromUrl) { sessionStorage.setItem(PORTAL_TOKEN_KEY, fromUrl); return fromUrl; }
+      return sessionStorage.getItem(PORTAL_TOKEN_KEY);
+    } catch {
+      return fromUrl;
+    }
+  });
+  useEffect(() => {
+    if (searchParams.has('k')) setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const { citas, medicamentos, tokenInvalido, updateEstado } = usePortalMedico(token, selectedDate);
 
