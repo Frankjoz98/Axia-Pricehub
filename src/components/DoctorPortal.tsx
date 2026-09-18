@@ -1,40 +1,29 @@
-import { useState, useEffect } from 'react';
-import { Search, Stethoscope, CheckCircle, Flame } from 'lucide-react';
-import { supabase } from '../supabase';
-import { useCitas } from '../hooks/useCitas';
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Stethoscope, CheckCircle, Flame, ShieldAlert } from 'lucide-react';
+import { usePortalMedico } from '../hooks/usePortalMedico';
 import { cn } from '../lib/utils';
-
-// Fila de la vista `inventario_impulso_publico` (solo columnas no sensibles)
-interface ImpulsoPublico {
-  odoo_id: string | null;
-  product_name: string;
-  stock: number;
-  marca: string | null;
-}
+import { todayYMD } from '../lib/dates';
 
 export default function DoctorPortal() {
   const [activeTab, setActiveTab] = useState<'citas' | 'catalogo'>('citas');
   const [searchTerm, setSearchTerm] = useState('');
-  const [medicamentos, setMedicamentos] = useState<ImpulsoPublico[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  const { citas, updateEstado } = useCitas(selectedDate);
+  const [selectedDate, setSelectedDate] = useState(todayYMD());
+  const [searchParams] = useSearchParams();
+  // El enlace del médico lleva el token de acceso: /portal-medico?k=<configuracion.portal_token>
+  const token = searchParams.get('k');
 
-  useEffect(() => {
-    // Lectura pública a través de la vista `inventario_impulso_publico`:
-    // nunca se consulta `inventario_local` directamente sin sesión (no expone precio/costo).
-    const fetchCatalog = async () => {
-      const { data, error } = await supabase
-        .from('inventario_impulso_publico')
-        .select('odoo_id, product_name, stock, marca')
-        .order('stock', { ascending: false })
-        .limit(200);
+  const { citas, medicamentos, tokenInvalido, updateEstado } = usePortalMedico(token, selectedDate);
 
-      if (error) console.error('Error cargando catálogo de impulso:', error);
-      if (data) setMedicamentos(data as ImpulsoPublico[]);
-    };
-    fetchCatalog();
-  }, []);
+  if (tokenInvalido) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen flex flex-col items-center justify-center p-8 text-center text-slate-500 font-sans">
+        <ShieldAlert className="w-12 h-12 text-rose-400 mb-4" />
+        <p className="font-bold text-slate-800">Enlace de acceso inválido</p>
+        <p className="text-sm mt-2">Solicita a la farmacia el enlace actualizado del portal médico.</p>
+      </div>
+    );
+  }
 
   const blacklistedBrands = ['cdn', 'coca cola', 'pepsi', 'diana', 'frito-lay', 'frito lay', 'eskimo', 'kerns', 'kern\'s', 'gatorade', 'powerade', 'monster', 'red bull'];
 

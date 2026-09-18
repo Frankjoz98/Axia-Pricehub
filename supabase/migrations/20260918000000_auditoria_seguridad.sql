@@ -29,14 +29,14 @@ CREATE INDEX IF NOT EXISTS idx_citas_fecha ON public.citas_medicas(fecha);
 ALTER TABLE public.citas_medicas ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------
--- 2. Roles de usuario (admin / caja)
---    El registro público está desactivado, así que solo existen usuarios conocidos.
---    Un usuario sin fila en `perfiles` se trata como 'admin' para no bloquear al dueño;
---    el usuario de caja se registra explícitamente abajo.
+-- 2. Roles de usuario (admin / caja) — mínimo privilegio
+--    El registro público está desactivado. Se siembra un perfil para cada usuario existente:
+--    'caja' para caja@axia.com y 'admin' para el resto. Un usuario SIN perfil (creado después
+--    en el dashboard) es 'caja' hasta que un admin le asigne rol.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.perfiles (
   user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  rol text NOT NULL DEFAULT 'admin' CHECK (rol IN ('admin', 'caja')),
+  rol text NOT NULL DEFAULT 'caja' CHECK (rol IN ('admin', 'caja')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
@@ -44,10 +44,15 @@ ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "perfil propio lectura" ON public.perfiles;
 CREATE POLICY "perfil propio lectura" ON public.perfiles
   FOR SELECT TO authenticated USING (auth.uid() = user_id);
+REVOKE ALL ON public.perfiles FROM anon;
 
 INSERT INTO public.perfiles (user_id, rol)
-SELECT id, 'caja' FROM auth.users WHERE email = 'caja@axia.com'
-ON CONFLICT (user_id) DO UPDATE SET rol = 'caja';
+SELECT id, CASE WHEN email = 'caja@axia.com' THEN 'caja' ELSE 'admin' END
+FROM auth.users
+ON CONFLICT (user_id) DO NOTHING;
+
+UPDATE public.perfiles SET rol = 'caja'
+WHERE user_id IN (SELECT id FROM auth.users WHERE email = 'caja@axia.com');
 
 CREATE OR REPLACE FUNCTION public.auth_rol()
 RETURNS text
@@ -56,10 +61,10 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT COALESCE((SELECT rol FROM public.perfiles WHERE user_id = auth.uid()), 'admin');
+  SELECT COALESCE((SELECT rol FROM public.perfiles WHERE user_id = auth.uid()), 'caja');
 $$;
 REVOKE ALL ON FUNCTION public.auth_rol() FROM public;
-GRANT EXECUTE ON FUNCTION public.auth_rol() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.auth_rol() TO authenticated;
 
 -- ------------------------------------------------------------
 -- 3. Tablas sensibles: solo rol admin
@@ -88,35 +93,93 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------
--- 4. Portal médico (público, sin login)
---    a) Vista con columnas mínimas del catálogo de impulso. Corre como owner, por lo que
---       no expone precio/costo ni el resto del inventario.
+-- 4. Portal médico (público, sin login) — acceso por TOKEN vía funciones RPC
+--    El rol anon NO tiene privilegios sobre ninguna tabla ni vista. Solo puede invocar
+--    tres funciones SECURITY DEFINER que exigen el token guardado en `configuracion.portal_token`.
+--    El médico recibe un enlace del tipo https://<app>/portal-medico?k=<token>.
+--    Para rotar el acceso: UPDATE configuracion SET portal_token = encode(gen_random_bytes(18),'hex');
 -- ------------------------------------------------------------
-CREATE OR REPLACE VIEW public.inventario_impulso_publico AS
-  SELECT odoo_id, product_name, stock, marca
-  FROM public.inventario_local
-  WHERE impulso_medico = true AND stock > 0;
+ALTER TABLE public.configuracion
+  ADD COLUMN IF NOT EXISTS portal_token text NOT NULL DEFAULT encode(gen_random_bytes(18), 'hex');
 
-REVOKE ALL ON public.inventario_impulso_publico FROM public;
-GRANT SELECT ON public.inventario_impulso_publico TO anon, authenticated;
+CREATE OR REPLACE FUNCTION public.portal_token_valido(p_token text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT p_token IS NOT NULL AND length(p_token) >= 16
+     AND EXISTS (SELECT 1 FROM public.configuracion WHERE id = 'global' AND portal_token = p_token);
+$$;
+REVOKE ALL ON FUNCTION public.portal_token_valido(text) FROM public;
 
---    b) Citas: autenticados (caja/admin) tienen acceso total.
---       anon puede leer y SOLO actualizar la columna `estado` (privilegio de columna + RLS).
+-- a) Catálogo de impulso: solo columnas no sensibles (sin precio ni costo)
+CREATE OR REPLACE FUNCTION public.portal_catalogo_impulso(p_token text)
+RETURNS TABLE (odoo_id text, product_name text, stock numeric, marca text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT i.odoo_id, i.product_name, i.stock, i.marca
+  FROM public.inventario_local i
+  WHERE public.portal_token_valido(p_token)
+    AND i.impulso_medico = true AND i.stock > 0
+  ORDER BY i.stock DESC
+  LIMIT 200;
+$$;
+
+-- b) Citas del día
+CREATE OR REPLACE FUNCTION public.portal_citas(p_token text, p_fecha date)
+RETURNS TABLE (id uuid, paciente text, fecha date, hora text, estado text, created_at timestamptz)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT c.id, c.paciente, c.fecha, c.hora, c.estado, c.created_at
+  FROM public.citas_medicas c
+  WHERE public.portal_token_valido(p_token) AND c.fecha = p_fecha
+  ORDER BY c.hora;
+$$;
+
+-- c) Cambiar SOLO el estado de una cita
+CREATE OR REPLACE FUNCTION public.portal_actualizar_cita(p_token text, p_id uuid, p_estado text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.portal_token_valido(p_token) THEN
+    RAISE EXCEPTION 'token inválido' USING ERRCODE = '28000';
+  END IF;
+  IF p_estado NOT IN ('pendiente', 'atendido', 'cancelado') THEN
+    RAISE EXCEPTION 'estado inválido';
+  END IF;
+  UPDATE public.citas_medicas SET estado = p_estado WHERE id = p_id;
+  RETURN FOUND;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.portal_catalogo_impulso(text) FROM public;
+REVOKE ALL ON FUNCTION public.portal_citas(text, date) FROM public;
+REVOKE ALL ON FUNCTION public.portal_actualizar_cita(text, uuid, text) FROM public;
+GRANT EXECUTE ON FUNCTION public.portal_catalogo_impulso(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.portal_citas(text, date) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.portal_actualizar_cita(text, uuid, text) TO anon, authenticated;
+
+-- d) Citas: los usuarios autenticados (caja/admin) las gestionan directamente; anon nunca toca la tabla
+DROP POLICY IF EXISTS "citas anon lectura" ON public.citas_medicas;
+DROP POLICY IF EXISTS "citas anon estado" ON public.citas_medicas;
 DROP POLICY IF EXISTS "citas autenticados" ON public.citas_medicas;
 CREATE POLICY "citas autenticados" ON public.citas_medicas
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "citas anon lectura" ON public.citas_medicas;
-CREATE POLICY "citas anon lectura" ON public.citas_medicas
-  FOR SELECT TO anon USING (true);
-
-DROP POLICY IF EXISTS "citas anon estado" ON public.citas_medicas;
-CREATE POLICY "citas anon estado" ON public.citas_medicas
-  FOR UPDATE TO anon USING (true) WITH CHECK (true);
-
 REVOKE ALL ON public.citas_medicas FROM anon;
-GRANT SELECT ON public.citas_medicas TO anon;
-GRANT UPDATE (estado) ON public.citas_medicas TO anon;
+
+-- Limpieza de la vista pública si existiera de una versión previa de esta migración
+DROP VIEW IF EXISTS public.inventario_impulso_publico;
 
 -- ------------------------------------------------------------
 -- 5. Pedidos de dependientes: cualquier autenticado (caja y admin), nunca anon

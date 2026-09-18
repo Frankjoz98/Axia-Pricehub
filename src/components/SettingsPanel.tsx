@@ -571,6 +571,17 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
                 className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-center" />
             </div>
           </div>
+          {config.portal_token && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+              <p className="text-xs font-bold text-blue-700 mb-1">Enlace del Portal Médico (compartir solo con el médico)</p>
+              <div className="flex items-center gap-2">
+                <input readOnly value={`${window.location.origin}/portal-medico?k=${config.portal_token}`}
+                  className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-xs font-mono text-slate-700 outline-none" />
+                <button type="button" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal-medico?k=${config.portal_token}`)}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">Copiar</button>
+              </div>
+            </div>
+          )}
           {(localConfig.nivel1_percent + localConfig.nivel2_percent + localConfig.nivel3_percent) !== 100 && (
             <p className="text-xs text-rose-500 font-bold bg-rose-50 p-2 rounded-lg text-center">⚠️ La suma de los niveles debe ser 100%. Actualmente: {localConfig.nivel1_percent + localConfig.nivel2_percent + localConfig.nivel3_percent}%</p>
           )}

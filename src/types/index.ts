@@ -49,6 +49,7 @@ export interface AppConfig {
   nivel2_percent: number;
   nivel3_percent: number;
   nombre_farmacia: string;
+  portal_token?: string;
   updated_at?: string;
 }
 
