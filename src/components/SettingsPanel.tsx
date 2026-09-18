@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Save, Upload, Trash2, Download, RefreshCw, FileSpreadsheet, Package, UploadCloud, Sliders, Settings } from 'lucide-react';
 import Papa from 'papaparse';
-import { cn, downloadFile } from '../lib/utils';
+import { cn, downloadFile, toDbProduct } from '../lib/utils';
 import { supabase } from '../supabase';
 import type { AppConfig, UnifiedProduct, VentaHistorica, OdooInventario } from '../types';
 
@@ -252,25 +252,47 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
 
           // Deduplicate
           const seen = new Set();
-          const upsertPayload = rawPayload.filter(row => {
+          const dedupedPayload = rawPayload.filter(row => {
             const key = row.odoo_id;
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
           });
 
-          if (upsertPayload.length === 0) { alert("No se encontraron registros válidos o falta la columna ID."); setIsUploadingInventario(false); return; }
+          if (dedupedPayload.length === 0) { alert("No se encontraron registros válidos o falta la columna ID."); setIsUploadingInventario(false); return; }
 
-          // Modo Snapshot: Purgar tabla para no dejar stock fantasma
-          const { error: deleteError } = await supabase.from('inventario_local').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          if (deleteError) throw deleteError;
+          // Modo Snapshot con preservación: los campos que NO vienen de Odoo (impulso_medico,
+          // fecha_vencimiento) se conservan por odoo_id; el CSV manda en stock, precio y costo.
+          const preservedByOdooId = new Map<string, { impulso_medico?: boolean; fecha_vencimiento?: string }>();
+          (inventario || []).forEach(inv => {
+            if (inv.odoo_id) preservedByOdooId.set(inv.odoo_id, { impulso_medico: inv.impulso_medico ?? false, fecha_vencimiento: inv.fecha_vencimiento });
+          });
+
+          const upsertPayload = dedupedPayload.map(row => {
+            const preserved = preservedByOdooId.get(row.odoo_id);
+            return {
+              ...row,
+              impulso_medico: preserved?.impulso_medico ?? false,
+              fecha_vencimiento: preserved?.fecha_vencimiento ?? null,
+              updated_at: new Date().toISOString()
+            };
+          });
 
           const chunkSize = 200;
           for (let i = 0; i < upsertPayload.length; i += chunkSize) {
             const { error } = await supabase.from('inventario_local').upsert(upsertPayload.slice(i, i + chunkSize), { onConflict: 'odoo_id' });
             if (error) throw error;
           }
-          alert(`✅ ${upsertPayload.length} productos de inventario procesados e importados como Snapshot.`);
+
+          // Productos que ya no están en Odoo: se eliminan (stock fantasma). Se hace DESPUÉS del upsert
+          // para que un fallo a mitad de carga nunca deje la tabla vacía.
+          const csvIds = new Set(upsertPayload.map(r => r.odoo_id));
+          const staleIds = (inventario || []).filter(inv => inv.odoo_id && !csvIds.has(inv.odoo_id)).map(inv => inv.id);
+          for (let i = 0; i < staleIds.length; i += 200) {
+            const { error } = await supabase.from('inventario_local').delete().in('id', staleIds.slice(i, i + 200));
+            if (error) throw error;
+          }
+          alert(`✅ ${upsertPayload.length} productos de inventario sincronizados (Snapshot). ${staleIds.length} productos ya no existen en Odoo y fueron retirados.`);
           if (onRefreshInventario) onRefreshInventario();
         } catch (err: any) { alert('Error: ' + err.message); }
         finally { setIsUploadingInventario(false); }
@@ -469,11 +491,8 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
             }
           });
 
-          const payload = Array.from(existingMap.values()).map(p => {
-            // Remove frontend-only properties before saving to DB
-            const { _searchIndex, ...dbProduct } = p as any;
-            return dbProduct;
-          });
+          // Quitar propiedades solo-frontend antes de guardar en DB
+          const payload = Array.from(existingMap.values()).map(p => toDbProduct(p as UnifiedProduct));
 
           if (payload.length === 0) { 
             alert("No se encontraron registros válidos en el archivo."); 

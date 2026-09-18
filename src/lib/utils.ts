@@ -1,9 +1,17 @@
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { CartItem } from '../types';
+import type { CartItem, UnifiedProduct } from '../types';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
+}
+
+// Elimina campos solo-frontend (como `_searchIndex`) antes de persistir en Supabase.
+// PostgREST rechaza columnas que no existen en la tabla `productos`.
+export function toDbProduct(product: UnifiedProduct): Omit<UnifiedProduct, '_searchIndex'> {
+  const { _searchIndex, ...dbProduct } = product;
+  void _searchIndex;
+  return dbProduct;
 }
 
 export function removeAccents(str: string): string {

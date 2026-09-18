@@ -17,7 +17,8 @@ Axia PriceHub es un sistema diseñado para la gestión inteligente de inventario
 ## 4. Requisitos Funcionales (EARS Notation)
 
 ### Módulo de Sincronización y Configuración
-- **RF-1 (Event-Driven):** WHEN el Administrador arrastra un archivo CSV de Inventario al panel de configuración, THEN el sistema DEBE vaciar la tabla `inventario_local` e insertar los nuevos registros extraídos del CSV (Snapshot Mode).
+- **RF-1 (Event-Driven):** WHEN el Administrador arrastra un archivo CSV de Inventario al panel de configuración, THEN el sistema DEBE sincronizar `inventario_local` en modo Snapshot con preservación: (a) hacer `upsert` por `odoo_id` de stock, precio, costo, marca, referencia y categoría; (b) conservar intactos los campos que no provienen de Odoo (`impulso_medico`, `fecha_vencimiento`) y el `id` interno de cada producto; (c) eliminar únicamente los productos cuyo `odoo_id` ya no aparece en el CSV, y hacerlo después del upsert para que un fallo a mitad de carga nunca deje la tabla vacía.
+- **RF-1b (Ubiquitous):** The sistema NUNCA DEBE persistir en `productos` campos calculados solo en el cliente (ej. `_searchIndex`); toda escritura pasa por `toDbProduct()`.
 - **RF-2 (Ubiquitous):** The sistema DEBE identificar cada producto único en los CSV utilizando el campo `odoo_id` o sus variaciones técnicas (`id`, `.id`, `ID externo`).
 - **RF-3 (Event-Driven):** WHEN el Administrador arrastra un archivo CSV de Ventas Históricas, THEN el sistema DEBE procesar los registros y sincronizarlos en la tabla `ventas_historicas`, omitiendo filas inválidas o sin `odoo_id`.
 

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { supabase } from '../supabase';
+import { toDbProduct } from '../lib/utils';
 import type { UnifiedProduct, SupplierOffer } from '../types';
 import { useState } from 'react';
 
@@ -20,21 +21,21 @@ export default function ProductEditor({ product, initialOffer, onClose, onSaved 
   };
 
   const handleSave = async () => {
-    const updatedProduct = { ...product };
-    const idx = updatedProduct.offers.findIndex(o => o.provider === offer.provider);
-    if (idx >= 0) updatedProduct.offers[idx] = offer;
-    else updatedProduct.offers.push(offer);
+    // Clonar el arreglo de ofertas para no mutar el producto que vive en el contexto global
+    const offers = [...product.offers];
+    const idx = offers.findIndex(o => o.provider === offer.provider);
+    if (idx >= 0) offers[idx] = offer;
+    else offers.push(offer);
 
-    const { error } = await supabase.from('productos').upsert(updatedProduct);
+    const { error } = await supabase.from('productos').upsert(toDbProduct({ ...product, offers }));
     if (error) alert("Error: " + error.message);
     else { onSaved(); onClose(); }
   };
 
   const handleDelete = async () => {
     if (!confirm(`¿Eliminar la oferta de ${offer.provider}?`)) return;
-    const updatedProduct = { ...product };
-    updatedProduct.offers = updatedProduct.offers.filter(o => o.provider !== offer.provider);
-    const { error } = await supabase.from('productos').upsert(updatedProduct);
+    const offers = product.offers.filter(o => o.provider !== offer.provider);
+    const { error } = await supabase.from('productos').upsert(toDbProduct({ ...product, offers }));
     if (error) alert("Error: " + error.message);
     else { onSaved(); onClose(); }
   };
