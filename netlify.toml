@@ -2,6 +2,11 @@
   publish = "dist"
   command = "npm run build"
 
+[build.environment]
+  # Las llaves anon y URL de Supabase son requeridas por el cliente frontend (protegidas por RLS).
+  # Se omiten del escaneo de secretos para que Netlify no bloquee el build; GEMINI_API_KEY sigue escaneada y protegida.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_ANON_KEY,SUPABASE_URL,VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL"
+
 [functions]
   directory = "netlify/functions"
 
