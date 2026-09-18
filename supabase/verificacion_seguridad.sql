@@ -3,7 +3,7 @@
 -- Solo lecturas. Ejecutar en el SQL Editor y comparar con lo esperado.
 -- ============================================================
 
--- 1. Perfiles: todos los usuarios con rol; solo caja@axia.com debe ser 'caja'
+-- 1. Perfiles: solo farmaxia26@gmail.com debe ser 'admin'; el resto 'caja'
 SELECT u.email, p.rol
 FROM auth.users u LEFT JOIN public.perfiles p ON p.user_id = u.id
 ORDER BY u.email;

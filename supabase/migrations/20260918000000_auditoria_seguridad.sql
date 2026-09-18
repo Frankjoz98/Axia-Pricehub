@@ -31,8 +31,10 @@ ALTER TABLE public.citas_medicas ENABLE ROW LEVEL SECURITY;
 -- ------------------------------------------------------------
 -- 2. Roles de usuario (admin / caja) — mínimo privilegio
 --    El registro público está desactivado. Se siembra un perfil para cada usuario existente:
---    'caja' para caja@axia.com y 'admin' para el resto. Un usuario SIN perfil (creado después
---    en el dashboard) es 'caja' hasta que un admin le asigne rol.
+--    'admin' SOLO para los correos de la lista explícita de abajo; cualquier otro usuario
+--    (incluida caja@axia.com o una cuenta de prueba olvidada) queda como 'caja'. Un usuario SIN
+--    perfil (creado después en el dashboard) también es 'caja' hasta que un admin le asigne rol:
+--      UPDATE public.perfiles SET rol = 'admin' WHERE user_id = (SELECT id FROM auth.users WHERE email = '<correo>');
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.perfiles (
   user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -47,12 +49,9 @@ CREATE POLICY "perfil propio lectura" ON public.perfiles
 REVOKE ALL ON public.perfiles FROM anon;
 
 INSERT INTO public.perfiles (user_id, rol)
-SELECT id, CASE WHEN email = 'caja@axia.com' THEN 'caja' ELSE 'admin' END
+SELECT id, CASE WHEN email IN ('farmaxia26@gmail.com') THEN 'admin' ELSE 'caja' END
 FROM auth.users
-ON CONFLICT (user_id) DO NOTHING;
-
-UPDATE public.perfiles SET rol = 'caja'
-WHERE user_id IN (SELECT id FROM auth.users WHERE email = 'caja@axia.com');
+ON CONFLICT (user_id) DO UPDATE SET rol = EXCLUDED.rol;
 
 CREATE OR REPLACE FUNCTION public.auth_rol()
 RETURNS text
