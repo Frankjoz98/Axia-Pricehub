@@ -24,10 +24,10 @@ import DoctorPortal from './components/DoctorPortal';
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentPath = location.pathname.replace('/', '') || 'home';
+  const currentPath = location.pathname.split('/')[1] || 'home';
 
   const { 
-    session, isCheckingAuth, config, 
+    session, rol, isCheckingAuth, config, 
     productos, ventas, inventario, ordenes, 
     isLoadingCatalog,
     weeklySales, setWeeklySales, setConfig, setOrdenes, refreshData 
@@ -68,8 +68,8 @@ export default function App() {
   // === AUTENTICACIÓN REQUERIDA ===
   if (!session) return <LoginScreen />;
 
-  // Seguridad estricta: Si el usuario es de caja, NUNCA dejarlo ver el resto del sistema
-  const isCajaUser = session.user?.email === 'caja@axia.com';
+  // Aislamiento visual del rol caja. La seguridad real vive en RLS (perfiles + auth_rol()).
+  const isCajaUser = rol === 'caja';
 
   if (isCajaUser || currentPath === 'pedidos') {
     return (

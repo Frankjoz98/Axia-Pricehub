@@ -1,4 +1,7 @@
 import { supabase } from '../supabase';
+import type { AgendaEvento, DailyBriefing } from '../types';
+import type { BusinessMetrics } from '../hooks/useBusinessMetrics';
+import type { AppAlert } from '../context/AlertsContext';
 
 export interface FichaTecnica {
   product_id: string;
@@ -6,10 +9,40 @@ export interface FichaTecnica {
   precio_promedio: string;
 }
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+export interface OrderAuditResult {
+  analysis: string;
+  expensiveItems: string[];
+  goodDeals: string[];
+}
+
+// Todas las llamadas a Gemini pasan por la Netlify Function `/api/ai` (netlify/functions/ai.mts):
+// la API key nunca viaja al navegador y solo usuarios con sesión de Supabase pueden usarla.
+async function callGemini<T>(prompt: string, temperature: number): Promise<T | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    console.warn('Axia AI: se requiere sesión para consultar la IA');
+    return null;
+  }
+
+  const response = await fetch('/api/ai', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify({ prompt, temperature })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Axia AI respondió ${response.status}`);
+  }
+
+  const { text } = (await response.json()) as { text: string };
+  return JSON.parse(text) as T;
+}
 
 export async function getFichaTecnica(productId: string, productName: string, activeIngredient: string): Promise<FichaTecnica | null> {
-  // 1. Verificar Caché en Supabase
+  // 1. Verificar caché en Supabase
   const { data: cached, error: cacheError } = await supabase
     .from('fichas_tecnicas')
     .select('*')
@@ -20,12 +53,7 @@ export async function getFichaTecnica(productId: string, productName: string, ac
     return cached as FichaTecnica;
   }
 
-  // 2. Si no existe en caché y tenemos API Key, consultar a Gemini
-  if (!GEMINI_API_KEY) {
-    console.warn("Falta VITE_GEMINI_API_KEY");
-    return null;
-  }
-
+  // 2. Si no existe en caché, consultar a Gemini vía función server-side
   const prompt = `Eres un experto farmacéutico en Nicaragua. El usuario es un dueño de farmacia que está considerando comprar el siguiente medicamento a sus proveedores:
 Nombre Comercial: ${productName}
 Principio Activo: ${activeIngredient}
@@ -42,30 +70,9 @@ Ejemplo de respuesta:
 `;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json"
-        }
-      })
-    });
+    const parsed = await callGemini<{ usos?: string; precio_promedio?: string }>(prompt, 0.2);
 
-    const aiData = await response.json();
-    
-    if (!aiData.candidates || aiData.candidates.length === 0) {
-      throw new Error("No candidates returned from Gemini");
-    }
-
-    const jsonText = aiData.candidates[0].content.parts[0].text;
-    const parsed = JSON.parse(jsonText);
-
-    if (!parsed.usos || !parsed.precio_promedio) {
+    if (!parsed || !parsed.usos || !parsed.precio_promedio) {
       throw new Error("Invalid JSON structure from Gemini");
     }
 
@@ -75,7 +82,7 @@ Ejemplo de respuesta:
       precio_promedio: parsed.precio_promedio
     };
 
-    // 3. Guardar en Caché Supabase (en background)
+    // 3. Guardar en caché Supabase (en background)
     supabase.from('fichas_tecnicas').insert(nuevaFicha).then(({ error }) => {
       if (error) console.error("Error guardando ficha en caché:", error);
     });
@@ -87,18 +94,7 @@ Ejemplo de respuesta:
   }
 }
 
-export interface OrderAuditResult {
-  analysis: string;
-  expensiveItems: string[];
-  goodDeals: string[];
-}
-
 export async function auditOrder(providerName: string, items: { productName: string; activeIngredient: string; quantity: number; netPrice: number }[]): Promise<OrderAuditResult | null> {
-  if (!GEMINI_API_KEY) {
-    console.warn("Falta VITE_GEMINI_API_KEY");
-    return null;
-  }
-
   const itemsListStr = items.map(i => `- ${i.productName} (${i.activeIngredient}): ${i.quantity} unidades a C$ ${i.netPrice.toFixed(2)} c/u`).join("\n");
 
   const prompt = `Eres un auditor financiero experto en farmacias de Nicaragua. Se está preparando una orden de compra para el proveedor "${providerName}".
@@ -106,7 +102,7 @@ Revisa la siguiente lista de productos y sus costos unitarios propuestos:
 
 ${itemsListStr}
 
-Por favor, analiza brevemente si estos costos tienen sentido para el mercado de Nicaragua. 
+Por favor, analiza brevemente si estos costos tienen sentido para el mercado de Nicaragua.
 Responde ÚNICAMENTE en formato JSON estricto con las siguientes propiedades:
 - "analysis": Un párrafo corto (máximo 4 líneas) dando tu opinión general sobre los precios de esta orden.
 - "expensiveItems": Un arreglo de strings con el nombre de los 2 o 3 productos que parecen estar muy caros comparados con su precio promedio de mercado. (Si ninguno está caro, devuelve un arreglo vacío).
@@ -121,28 +117,8 @@ Ejemplo de respuesta:
 `;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: "application/json"
-        }
-      })
-    });
-
-    const aiData = await response.json();
-    
-    if (!aiData.candidates || aiData.candidates.length === 0) {
-      throw new Error("No candidates returned from Gemini");
-    }
-
-    const jsonText = aiData.candidates[0].content.parts[0].text;
-    const parsed = JSON.parse(jsonText);
+    const parsed = await callGemini<Partial<OrderAuditResult>>(prompt, 0.3);
+    if (!parsed) return null;
 
     return {
       analysis: parsed.analysis || "Análisis no disponible",
@@ -155,19 +131,12 @@ Ejemplo de respuesta:
   }
 }
 
-import type { AgendaEvento, DailyBriefing } from '../types';
-
 export async function generateDailyBriefing(
   eventos: AgendaEvento[],
-  metrics: any,
-  alertas: any[]
+  metrics: Pick<BusinessMetrics, 'totalRevenue' | 'marginPercent' | 'totalTransactions'> | null,
+  alertas: Pick<AppAlert, 'title' | 'message'>[]
 ): Promise<DailyBriefing | null> {
-  if (!GEMINI_API_KEY) {
-    console.warn("Falta VITE_GEMINI_API_KEY");
-    return null;
-  }
-
-  const activeEventsStr = eventos.filter(e => !e.completado).map(e => 
+  const activeEventsStr = eventos.filter(e => !e.completado).map(e =>
     `[${e.prioridad.toUpperCase()}] ${e.tipo}: ${e.titulo} - ${e.descripcion || ''}`
   ).join('\n');
 
@@ -205,28 +174,8 @@ Ejemplo JSON:
 `;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: "application/json"
-        }
-      })
-    });
-
-    const aiData = await response.json();
-    
-    if (!aiData.candidates || aiData.candidates.length === 0) {
-      throw new Error("No candidates returned from Gemini");
-    }
-
-    const jsonText = aiData.candidates[0].content.parts[0].text;
-    const parsed = JSON.parse(jsonText);
+    const parsed = await callGemini<Partial<DailyBriefing>>(prompt, 0.3);
+    if (!parsed) return null;
 
     return {
       greeting: parsed.greeting || "Buenos días.",

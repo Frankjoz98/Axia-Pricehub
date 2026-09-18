@@ -529,3 +529,5 @@ export function useBusinessMetrics({ ventas, inventario = [], ordenes = [], time
     };
   }, [filteredVentas, ventas, inventario, ordenes, timeGrouping, weeklySales]);
 }
+
+export type BusinessMetrics = ReturnType<typeof useBusinessMetrics>;

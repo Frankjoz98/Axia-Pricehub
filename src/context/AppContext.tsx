@@ -1,10 +1,14 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { api } from '../services/api';
 import type { UnifiedProduct, VentaHistorica, OdooInventario, PurchaseOrder, AppConfig, Proveedor, FacturaCompra } from '../types';
 
+export type UserRol = 'admin' | 'caja';
+
 interface AppContextType {
-  session: any;
+  session: Session | null;
+  rol: UserRol;
   isCheckingAuth: boolean;
   productos: UnifiedProduct[];
   ventas: VentaHistorica[];
@@ -36,7 +40,9 @@ const DEFAULT_CONFIG: AppConfig = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [rol, setRol] = useState<UserRol>('admin');
+  const [rolResolved, setRolResolved] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const [productos, setProductos] = useState<UnifiedProduct[]>([]);
@@ -61,8 +67,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Resolver el rol desde `perfiles` (fuente de verdad: RLS). El correo de caja se mantiene
+  // como respaldo mientras la migración de roles no esté aplicada.
+  const userId = session?.user?.id ?? null;
+  const userEmail = session?.user?.email ?? null;
+  useEffect(() => {
+    if (!userId) { setRol('admin'); setRolResolved(false); return; }
+    let cancelled = false;
+    setRolResolved(false);
+    supabase.from('perfiles').select('rol').eq('user_id', userId).maybeSingle().then(({ data }) => {
+      if (cancelled) return;
+      const dbRol = data?.rol === 'caja' ? 'caja' : null;
+      setRol(dbRol ?? (userEmail === 'caja@axia.com' ? 'caja' : 'admin'));
+      setRolResolved(true);
+    });
+    return () => { cancelled = true; };
+  }, [userId, userEmail]);
+
   const refreshData = async () => {
-    if (!session) return;
+    // El rol caja solo usa la terminal de pedidos: no descarga ventas, inventario ni catálogo.
+    if (!session || rol === 'caja') return;
     
     setIsLoadingCatalog(true);
     setIsLoadingVentas(true);
@@ -93,11 +117,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Depender de user.id (no del objeto session) evita refetch total en cada TOKEN_REFRESHED
   useEffect(() => {
-    if (session) {
+    if (userId && rolResolved && rol !== 'caja') {
       refreshData();
     }
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, rolResolved, rol]);
 
   useEffect(() => {
     localStorage.setItem('axia_weekly_sales', weeklySales.toString());
@@ -105,7 +131,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      session, isCheckingAuth,
+      session, rol, isCheckingAuth,
       productos, ventas, inventario, ordenes, config, proveedores, facturas,
       isLoadingCatalog, isLoadingVentas,
       weeklySales, setWeeklySales, setConfig, setOrdenes,

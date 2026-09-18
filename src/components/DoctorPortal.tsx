@@ -4,28 +4,34 @@ import { supabase } from '../supabase';
 import { useCitas } from '../hooks/useCitas';
 import { cn } from '../lib/utils';
 
+// Fila de la vista `inventario_impulso_publico` (solo columnas no sensibles)
+interface ImpulsoPublico {
+  odoo_id: string | null;
+  product_name: string;
+  stock: number;
+  marca: string | null;
+}
+
 export default function DoctorPortal() {
   const [activeTab, setActiveTab] = useState<'citas' | 'catalogo'>('citas');
   const [searchTerm, setSearchTerm] = useState('');
-  const [medicamentos, setMedicamentos] = useState<any[]>([]);
+  const [medicamentos, setMedicamentos] = useState<ImpulsoPublico[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
   const { citas, updateEstado } = useCitas(selectedDate);
 
   useEffect(() => {
-    // Read-only query to fetch public data for the impulse catalog
+    // Lectura pública a través de la vista `inventario_impulso_publico`:
+    // nunca se consulta `inventario_local` directamente sin sesión (no expone precio/costo).
     const fetchCatalog = async () => {
-      const { data } = await supabase
-        .from('inventario_local')
+      const { data, error } = await supabase
+        .from('inventario_impulso_publico')
         .select('odoo_id, product_name, stock, marca')
-        .eq('impulso_medico', true)
-        .gt('stock', 0)
         .order('stock', { ascending: false })
         .limit(200);
-      
-      if (data) {
-        setMedicamentos(data);
-      }
+
+      if (error) console.error('Error cargando catálogo de impulso:', error);
+      if (data) setMedicamentos(data as ImpulsoPublico[]);
     };
     fetchCatalog();
   }, []);
@@ -33,7 +39,7 @@ export default function DoctorPortal() {
   const blacklistedBrands = ['cdn', 'coca cola', 'pepsi', 'diana', 'frito-lay', 'frito lay', 'eskimo', 'kerns', 'kern\'s', 'gatorade', 'powerade', 'monster', 'red bull'];
 
   const filteredMedicamentos = medicamentos.filter(m => {
-    const searchString = `${m.marca || ''} ${m.laboratorio || ''} ${m.proveedor || ''} ${m.product_name || ''}`.toLowerCase();
+    const searchString = `${m.marca || ''} ${m.product_name || ''}`.toLowerCase();
     const isExcluded = blacklistedBrands.some(brand => searchString.includes(brand));
     const matchesSearch = (m.product_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     
