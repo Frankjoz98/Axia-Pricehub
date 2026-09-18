@@ -1,4 +1,6 @@
 import type { AgendaEvento, Proveedor, FacturaCompra, VentaHistorica, OdooInventario } from '../types';
+import { parseLocalYMD, daysUntil } from './dates';
+import { buildInventarioIndex } from './odoo';
 
 export function generateSuggestedEvents(
   proveedores: Proveedor[],
@@ -8,7 +10,7 @@ export function generateSuggestedEvents(
   targetDate: string // YYYY-MM-DD
 ): AgendaEvento[] {
   const suggested: AgendaEvento[] = [];
-  const today = new Date(targetDate);
+  const today = parseLocalYMD(targetDate);
   const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const dayName = dayNames[today.getDay()];
   const nowStr = new Date().toISOString();
@@ -33,12 +35,10 @@ export function generateSuggestedEvents(
   });
 
   // 2. Facturas por vencer (dentro de 3 días) y vencidas
-  const msInDay = 24 * 60 * 60 * 1000;
   facturas.forEach(f => {
     if (f.estado !== 'pagada' && f.fecha_vencimiento) {
-      const vencimiento = new Date(f.fecha_vencimiento);
-      const diffDays = Math.ceil((vencimiento.getTime() - today.getTime()) / msInDay);
-      
+      const diffDays = daysUntil(f.fecha_vencimiento, today);
+
       const prov = proveedores.find(p => p.id === f.proveedor_id);
       const provName = prov ? prov.nombre : 'Proveedor';
 
@@ -79,27 +79,23 @@ export function generateSuggestedEvents(
   });
 
   // 3. Stock crítico de alta rotación (Top 20 más vendidos en últimos 30 días con stock < 5)
-  const productSales = new Map<string, { qty: number, name: string }>();
+  const invIndex = buildInventarioIndex(inventario);
+  const salesByInvId = new Map<string, number>();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
   ventas.forEach(v => {
-    if (new Date(v.date) >= thirtyDaysAgo) {
-      const current = productSales.get(v.product_name) || { qty: 0, name: v.product_name };
-      productSales.set(v.product_name, { ...current, qty: current.qty + v.quantity });
-    }
+    if (new Date(v.date) < thirtyDaysAgo) return;
+    const inv = invIndex.find(v);
+    if (inv) salesByInvId.set(inv.id, (salesByInvId.get(inv.id) || 0) + v.quantity);
   });
 
-  const topSellers = Array.from(productSales.values())
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, 20);
-
-  const topSellerNames = topSellers.map(s => s.name);
-  
-  // Buscar esos productos en inventario y verificar si el stock es bajo
-  const criticalStockItems = inventario.filter(i => 
-    topSellerNames.includes(i.product_name) && i.stock < 5
+  const topSellerIds = new Set(
+    Array.from(salesByInvId.entries()).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([id]) => id)
   );
+
+  // Buscar esos productos en inventario y verificar si el stock es bajo
+  const criticalStockItems = inventario.filter(i => topSellerIds.has(i.id) && i.stock < 5);
 
   if (criticalStockItems.length > 0) {
     const pNames = criticalStockItems.map(i => `${i.product_name} (${i.stock} un.)`).join(', ');
@@ -121,15 +117,14 @@ export function generateSuggestedEvents(
   // 4. Vencimientos a 5 meses (150 días)
   inventario.forEach(item => {
     if (item.fecha_vencimiento && item.stock != null && item.stock > 0) {
-      const vDate = new Date(item.fecha_vencimiento);
-      const diffDays = Math.ceil((vDate.getTime() - today.getTime()) / msInDay);
-      
+      const diffDays = daysUntil(item.fecha_vencimiento, today);
+
       // Mostrar si vence en los próximos 150 días (aprox 5 meses)
       if (diffDays >= 0 && diffDays <= 150) {
         let prio: 'urgente' | 'alta' | 'media' = 'media';
         if (diffDays <= 30) prio = 'urgente';
         else if (diffDays <= 90) prio = 'alta';
-        
+
         suggested.push({
           id: `auto-vence-${item.id}-${targetDate}`,
           user_id: 'system',

@@ -6,8 +6,8 @@ import { cn } from '../lib/utils';
 
 interface DashboardProps {
   config: AppConfig;
+  /** Venta semanal efectiva (ya resuelta en AppContext). */
   weeklySales: number;
-  setWeeklySales: (v: number) => void;
   cart: CartItem[];
   ventas: VentaHistorica[];
   ordenes: PurchaseOrder[];
@@ -15,10 +15,10 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, onNavigate }: DashboardProps) {
-  const { calculatedWeeklySales, flujoComercial } = useBusinessMetrics({ ventas, ordenes, weeklySales });
-  const budgetTotal = calculatedWeeklySales * (config.budget_percent / 100);
+  const { flujoComercial } = useBusinessMetrics({ ventas, ordenes, weeklySales });
+  const budgetTotal = weeklySales * (config.budget_percent / 100);
   const totalSpent = cart.reduce((a, i) => a + (i.quantity * i.selectedOffer.netPrice), 0);
-  
+
   const totalSavings = cart.reduce((a, i) => {
     if (!i.product.offers || i.product.offers.length <= 1) return a;
     const avgPrice = i.product.offers.reduce((sum, o) => sum + o.netPrice, 0) / i.product.offers.length;
@@ -33,7 +33,7 @@ export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, 
         <div className="absolute top-0 right-0 p-12 opacity-10 pointer-events-none">
           <Wallet className="w-64 h-64 transform rotate-12" />
         </div>
-        
+
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full text-sm font-bold tracking-wider mb-6 border border-white/20 backdrop-blur-md text-violet-200 uppercase">
             <span className="relative flex h-2 w-2">
@@ -42,14 +42,14 @@ export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, 
             </span>
             Sistema en Línea
           </div>
-          
+
           <h1 className="text-4xl sm:text-5xl font-black mb-4 tracking-tight leading-tight">
             Control Financiero <br/>
             <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-cyan-400">
               Inteligente
             </span>
           </h1>
-          
+
           <p className="text-slate-300 max-w-xl text-lg font-medium leading-relaxed mb-10">
             Plataforma centralizada de abastecimiento. Encuentra el proveedor más barato, reduce el inventario inmovilizado y mejora la rentabilidad de tu farmacia.
           </p>
@@ -83,7 +83,7 @@ export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, 
             Planificación de Pedidos
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <button onClick={() => onNavigate('catalog', 1)} className="group bg-white border border-slate-200 hover:border-emerald-300 p-6 rounded-4xl flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:shadow-emerald-500/10 transition-all active:scale-[0.98]">
+            <button onClick={() => onNavigate('inventory', 1)} className="group bg-white border border-slate-200 hover:border-emerald-300 p-6 rounded-4xl flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:shadow-emerald-500/10 transition-all active:scale-[0.98]">
               <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform group-hover:bg-emerald-500 group-hover:text-white shadow-sm">
                 <Calendar className="w-8 h-8" />
               </div>
@@ -92,8 +92,8 @@ export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, 
                 <p className="text-sm font-medium text-slate-500 mt-1">Alta Rotación</p>
               </div>
             </button>
-            
-            <button onClick={() => onNavigate('catalog', 2)} className="group bg-white border border-slate-200 hover:border-amber-300 p-6 rounded-4xl flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:shadow-amber-500/10 transition-all active:scale-[0.98]">
+
+            <button onClick={() => onNavigate('inventory', 2)} className="group bg-white border border-slate-200 hover:border-amber-300 p-6 rounded-4xl flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:shadow-amber-500/10 transition-all active:scale-[0.98]">
               <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform group-hover:bg-amber-500 group-hover:text-white shadow-sm">
                 <Calendar className="w-8 h-8" />
               </div>
@@ -103,7 +103,7 @@ export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, 
               </div>
             </button>
 
-            <button onClick={() => onNavigate('catalog', 3)} className="group bg-white border border-slate-200 hover:border-blue-300 p-6 rounded-4xl flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:shadow-blue-500/10 transition-all active:scale-[0.98]">
+            <button onClick={() => onNavigate('inventory', 3)} className="group bg-white border border-slate-200 hover:border-blue-300 p-6 rounded-4xl flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:shadow-blue-500/10 transition-all active:scale-[0.98]">
               <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform group-hover:bg-blue-500 group-hover:text-white shadow-sm">
                 <Calendar className="w-8 h-8" />
               </div>
@@ -136,10 +136,10 @@ export default function Dashboard({ config, weeklySales, cart, ventas, ordenes, 
                <div>
                   <div className="flex justify-between text-sm font-bold mb-2">
                     <span className="text-slate-600">Ratio Compras/Ventas</span>
-                    <span className={flujoComercial.ratio > 75 ? "text-rose-600" : "text-emerald-600"}>{flujoComercial.ratio.toFixed(1)}%</span>
+                    <span className={flujoComercial.ratio > config.budget_percent ? "text-rose-600" : "text-emerald-600"}>{flujoComercial.ratio.toFixed(1)}%</span>
                   </div>
                   <div className="h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                    <div className={cn("h-full", flujoComercial.ratio > 75 ? "bg-rose-500" : "bg-emerald-500")} style={{width: `${Math.min(100, flujoComercial.ratio)}%`}}></div>
+                    <div className={cn("h-full", flujoComercial.ratio > config.budget_percent ? "bg-rose-500" : "bg-emerald-500")} style={{width: `${Math.min(100, flujoComercial.ratio)}%`}}></div>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium mt-1">El nivel óptimo no debería superar el {(config.budget_percent).toFixed(1)}%.</p>
                </div>

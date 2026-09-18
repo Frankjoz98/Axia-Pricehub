@@ -4,6 +4,7 @@ import { Building2, Search, Plus, Filter, LayoutGrid } from 'lucide-react';
 import { SupplierCard } from './SupplierCard';
 import { SupplierProfile } from './SupplierProfile';
 import { SupplierForm } from './SupplierForm';
+import { isFacturaVencida, isFacturaPendienteVigente } from '../../lib/facturas';
 
 export function SupplierHub() {
   const { proveedores, facturas } = useAppContext();
@@ -15,9 +16,9 @@ export function SupplierHub() {
   const kpis = useMemo(() => {
     const activos = proveedores.filter(p => p.activo).length;
     const totalComprado = facturas.reduce((acc, f) => acc + f.monto_total, 0);
-    const pendientes = facturas.filter(f => f.estado === 'pendiente');
-    const vencidas = facturas.filter(f => f.estado === 'vencida' || (f.estado === 'pendiente' && f.fecha_vencimiento && new Date(f.fecha_vencimiento) < new Date()));
-    
+    const pendientes = facturas.filter(f => isFacturaPendienteVigente(f));
+    const vencidas = facturas.filter(f => isFacturaVencida(f));
+
     return {
       activos,
       totalComprado,
@@ -30,8 +31,8 @@ export function SupplierHub() {
   const filteredProveedores = useMemo(() => {
     if (!searchTerm) return proveedores;
     const lower = searchTerm.toLowerCase();
-    return proveedores.filter(p => 
-      p.nombre.toLowerCase().includes(lower) || 
+    return proveedores.filter(p =>
+      p.nombre.toLowerCase().includes(lower) ||
       (p.numero_cliente && p.numero_cliente.toLowerCase().includes(lower))
     );
   }, [proveedores, searchTerm]);
@@ -54,7 +55,7 @@ export function SupplierHub() {
           </h1>
           <p className="text-slate-500 mt-1">Control administrativo y facturas de compras.</p>
         </div>
-        <button 
+        <button
           onClick={() => setIsFormOpen(true)}
           className="bg-violet-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-violet-700 transition-colors flex items-center gap-2 shadow-lg shadow-violet-200"
         >
@@ -89,7 +90,7 @@ export function SupplierHub() {
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input 
+          <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -109,11 +110,11 @@ export function SupplierHub() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredProveedores.length > 0 ? (
           filteredProveedores.map(p => (
-            <SupplierCard 
-              key={p.id} 
-              proveedor={p} 
-              facturas={facturas.filter(f => f.proveedor_id === p.id)} 
-              onClick={() => setSelectedSupplierId(p.id)} 
+            <SupplierCard
+              key={p.id}
+              proveedor={p}
+              facturas={facturas.filter(f => f.proveedor_id === p.id)}
+              onClick={() => setSelectedSupplierId(p.id)}
             />
           ))
         ) : (

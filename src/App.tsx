@@ -26,14 +26,14 @@ export default function App() {
   const location = useLocation();
   const currentPath = location.pathname.split('/')[1] || 'home';
 
-  const { 
-    session, rol, isCheckingAuth, config, 
-    productos, ventas, inventario, ordenes, 
+  const {
+    session, rol, isCheckingAuth, config,
+    productos, ventas, inventario, ordenes,
     isLoadingCatalog,
-    weeklySales, setWeeklySales, setConfig, setOrdenes, refreshData 
+    weeklySalesEfectivo, setConfig, setOrdenes, refreshData
   } = useAppContext();
 
-  const { cart, isCartOpen, setIsCartOpen, updateQuantity, handleReopenOrder, addToCart, clearProviderCart } = useCart();
+  const { cart, isCartOpen, setIsCartOpen, updateQuantity, handleReopenOrder, addToCart, clearProviderCart, clearCart } = useCart();
 
   // Local UI states
   const [selectedNivel, setSelectedNivel] = useState<NivelPrioridad | null>(null);
@@ -48,7 +48,7 @@ export default function App() {
   const activeTab = currentPath;
 
   // === BUDGET CALC ===
-  const budgetTotal = weeklySales * (config.budget_percent / 100);
+  const budgetTotal = weeklySalesEfectivo * (config.budget_percent / 100);
   const totalSpent = cart.reduce((a, i) => a + (i.quantity * i.selectedOffer.netPrice), 0);
 
   // === RENDER ===
@@ -94,7 +94,7 @@ export default function App() {
               <Wallet className="w-4 h-4 text-violet-500" />
               <span className="text-slate-500 font-medium">Presupuesto:</span> <strong className={cn(budgetTotal - totalSpent < 0 ? "text-rose-500" : "text-slate-900")}>C$ {(budgetTotal - totalSpent).toFixed(0)}</strong>
             </div>
-            
+
             <button onClick={() => handleNavigate('orders')} className={cn("p-2 rounded-full transition-colors hidden sm:block", activeTab === 'orders' ? "text-violet-600 bg-violet-50" : "text-slate-400 hover:text-violet-600 hover:bg-violet-50")} title="Pedidos">
               <Package className="w-5 h-5" />
             </button>
@@ -117,13 +117,13 @@ export default function App() {
       <main className={cn("flex-1 w-full", currentPath === 'agenda' ? "max-w-full px-0 py-0" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6")}>
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
-          <Route path="/home" element={<Dashboard config={config} weeklySales={weeklySales} setWeeklySales={setWeeklySales} cart={cart} ventas={ventas} ordenes={ordenes} onNavigate={handleNavigate} />} />
+          <Route path="/home" element={<Dashboard config={config} weeklySales={weeklySalesEfectivo} cart={cart} ventas={ventas} ordenes={ordenes} onNavigate={handleNavigate} />} />
           <Route path="/inventory" element={<InventoryHub productos={productos} inventario={inventario} ventas={ventas} isLoadingCatalog={isLoadingCatalog} selectedNivel={selectedNivel} setSelectedNivel={setSelectedNivel} onAddToCart={addToCart} onEditProduct={(p, o) => { setEditingProduct(p); setEditingOffer(o); }} />} />
           <Route path="/intelligence" element={<IntelligenceHub ventas={ventas} inventario={inventario} ordenes={ordenes} productos={productos} onAddToCart={addToCart} />} />
           <Route path="/agenda" element={<AgendaHub />} />
           <Route path="/orders" element={<OrdersPanel ordenes={ordenes} setOrdenes={setOrdenes} onReopenOrder={(order) => handleReopenOrder(order, productos)} />} />
           <Route path="/suppliers" element={<SupplierHub />} />
-          <Route path="/settings" element={<SettingsPanel config={config} setConfig={setConfig} productos={productos} ventas={ventas} inventario={inventario} onRefreshCatalog={refreshData} onRefreshVentas={refreshData} onRefreshInventario={refreshData} onClearCart={() => {}} />} />
+          <Route path="/settings" element={<SettingsPanel config={config} setConfig={setConfig} productos={productos} ventas={ventas} inventario={inventario} onRefreshCatalog={refreshData} onRefreshVentas={refreshData} onRefreshInventario={refreshData} onClearCart={() => { if (confirm('¿Vaciar todo el carrito?')) clearCart(); }} />} />
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </main>

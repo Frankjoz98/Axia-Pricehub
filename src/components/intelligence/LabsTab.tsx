@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Search, Package, DollarSign } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import type { BusinessMetrics } from '../../hooks/useBusinessMetrics';
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#64748b', '#f97316'];
 
 interface LabsTabProps {
-  metrics: any;
+  metrics: BusinessMetrics;
 }
 
 export default function LabsTab({ metrics }: LabsTabProps) {
@@ -32,7 +33,7 @@ export default function LabsTab({ metrics }: LabsTabProps) {
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
             <XAxis type="number" tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
             <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={100} />
-            <Tooltip formatter={(v: any) => `C$ ${Number(v).toFixed(0)}`} cursor={{ fill: '#f8fafc' }} />
+            <Tooltip formatter={(v) => `C$ ${Number(v).toFixed(0)}`} cursor={{ fill: '#f8fafc' }} />
             <Bar dataKey="revenue" fill="#6366f1" radius={[0, 4, 4, 0]} name="Ingresos" />
           </BarChart>
         </ResponsiveContainer>
@@ -41,7 +42,7 @@ export default function LabsTab({ metrics }: LabsTabProps) {
       <div className="bg-white rounded-xl p-5 text-slate-900 shadow-sm border border-slate-100">
         <h3 className="font-black text-lg mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-500" /> Top Laboratorios (Margen Promedio)</h3>
         <div className="space-y-3 max-h-100 overflow-y-auto pr-2">
-          {metrics.allBrandsData.filter((b: any) => b.fullName.toLowerCase().includes(labSearch.toLowerCase())).slice(0, 50).map((b: any, i: number) => (
+          {metrics.allBrandsData.filter(b => b.fullName.toLowerCase().includes(labSearch.toLowerCase())).slice(0, 50).map((b, i) => (
             <div key={b.name} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
               <div className="flex items-center gap-3">
                 <span className="text-slate-300 font-black w-5 text-right">{i + 1}</span>
@@ -65,15 +66,15 @@ export default function LabsTab({ metrics }: LabsTabProps) {
           ))}
         </div>
       </div>
-      
+
       <div className="bg-white rounded-xl p-5 text-slate-900 shadow-sm border border-slate-100 lg:col-span-2">
          <h3 className="font-black text-lg mb-4 text-center">Distribución de Márgenes por Laboratorio (Gráfica)</h3>
          <ResponsiveContainer width="100%" height={300}>
           <PieChart>
             <Pie data={metrics.brandData} dataKey="margin" nameKey="name" cx="50%" cy="50%" outerRadius={110} label={false} labelLine={false} fontSize={12} stroke="none">
-              {metrics.brandData.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              {metrics.brandData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
             </Pie>
-            <Tooltip formatter={(v: any, _name: any, props: any) => [`C$ ${Number(v).toFixed(0)} (${props.payload.marginPercent.toFixed(1)}%)`, 'Ganancia Neta']} />
+            <Tooltip formatter={(v, _name, props) => [`C$ ${Number(v).toFixed(0)} (${Number((props.payload as { marginPercent?: number })?.marginPercent ?? 0).toFixed(1)}%)`, 'Ganancia Neta']} />
           </PieChart>
         </ResponsiveContainer>
       </div>

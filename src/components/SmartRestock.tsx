@@ -2,6 +2,22 @@ import { useMemo, useState } from 'react';
 import type { UnifiedProduct, VentaHistorica, SupplierOffer, OdooInventario } from '../types';
 import { Sparkles, ShoppingCart, TrendingUp, AlertCircle, ArrowRight, Zap, RefreshCw, Package, Minus, Plus, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { buildInventarioIndex, nameKey, stripOdooRef } from '../lib/odoo';
+
+const DAYS_TO_COVER = 15;          // Cobertura objetivo de inventario
+const ANALYSIS_WINDOW_DAYS = 30;   // Ventana de ventas para estimar la velocidad diaria
+
+interface RestockSuggestion {
+  odooName: string;
+  soldQty: number;
+  stockActual: number;
+  stockDeseado: number;
+  faltante: number;
+  isCritical: boolean;
+  match: UnifiedProduct;
+  bestOffer: SupplierOffer;
+  suggestedQty: number;
+}
 
 interface SmartRestockProps {
   ventas: VentaHistorica[];
@@ -14,39 +30,50 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
   const [addedItems, setAddedItems] = useState<Set<string>>(new Set());
   const [isCalculating, setIsCalculating] = useState(false);
 
-  const suggestions = useMemo(() => {
-    // 1. Encontrar los productos más vendidos (Alta Rotación)
-    const productStats: Record<string, { qty: number; margin: number; revenue: number }> = {};
-    
-    ventas.forEach(v => {
-      if (!productStats[v.product_name]) productStats[v.product_name] = { qty: 0, margin: 0, revenue: 0 };
-      productStats[v.product_name].qty += v.quantity;
-      productStats[v.product_name].margin += (v.margin || 0);
-      productStats[v.product_name].revenue += (v.quantity * v.unit_price);
+  const suggestions = useMemo((): RestockSuggestion[] => {
+    // 1. Ventana de análisis: últimos 30 días con datos (no todo el histórico) y días realmente cubiertos
+    const timestamps = ventas.map(v => new Date(v.date).getTime()).filter(t => !Number.isNaN(t));
+    if (timestamps.length === 0) return [];
+    const maxTs = Math.max(...timestamps);
+    const windowStart = maxTs - ANALYSIS_WINDOW_DAYS * 86_400_000;
+    const ventasVentana = ventas.filter(v => {
+      const t = new Date(v.date).getTime();
+      return !Number.isNaN(t) && t >= windowStart;
+    });
+    const minTs = Math.min(...ventasVentana.map(v => new Date(v.date).getTime()));
+    const diasOperando = Math.max(1, Math.ceil((maxTs - minTs) / 86_400_000));
+
+    // 2. Ventas agrupadas por producto de inventario (odoo_id) o por nombre si no cruza
+    const invIndex = buildInventarioIndex(inventario);
+    const productSales = new Map<string, { qty: number; name: string; stockItem?: OdooInventario }>();
+    ventasVentana.forEach(v => {
+      const stockItem = invIndex.find(v);
+      const key = stockItem ? `inv:${stockItem.id}` : `name:${nameKey(v.product_name)}`;
+      const current = productSales.get(key) || { qty: 0, name: stockItem?.product_name ?? v.product_name, stockItem };
+      current.qty += v.quantity;
+      productSales.set(key, current);
     });
 
-    // 2. Función de búsqueda difusa básica
+    // 3. Búsqueda difusa del producto de Odoo en los catálogos de proveedores
     const findMatch = (odooName: string): UnifiedProduct | null => {
       const stopWords = ['de', 'con', 'para', 'mg', 'ml', 'gr', 'g', 'tab', 'cap', 'susp'];
-      const odooTokens = odooName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+      const odooTokens = stripOdooRef(odooName).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
         .filter(t => t.length > 2 && !stopWords.includes(t));
-      
-      let bestMatch = null;
+
+      let bestMatch: UnifiedProduct | null = null;
       let maxScore = 0;
-      
+
       for (const prod of productos) {
         const pTokens = prod.name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/);
         let score = 0;
         for (const ot of odooTokens) {
-          if (pTokens.some(pt => pt.includes(ot) || ot.includes(pt))) {
-            score++;
-          }
+          if (pTokens.some(pt => pt.includes(ot) || ot.includes(pt))) score++;
         }
         // Boost si la primera palabra coincide (suele ser el ingrediente activo o marca principal)
         if (odooTokens.length > 0 && pTokens.length > 0 && (odooTokens[0] === pTokens[0] || pTokens[0].includes(odooTokens[0]))) {
-           score += 2;
+          score += 2;
         }
-        if (score > maxScore && score >= 2) { // Requiere al menos un buen nivel de coincidencia
+        if (score > maxScore && score >= 2) {
           maxScore = score;
           bestMatch = prod;
         }
@@ -54,86 +81,61 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
       return bestMatch;
     };
 
-    // 1. Agrupar ventas por producto
-    const productSales = new Map<string, { qty: number, name: string }>();
-    ventas.forEach(v => {
-      const current = productSales.get(v.product_name) || { qty: 0, name: v.product_name };
-      current.qty += v.quantity;
-      productSales.set(v.product_name, current);
-    });
-
-    const allSoldProducts = Array.from(productSales.values());
-
-    // 3. Evaluar TODOS los productos vendidos contra el inventario
-    const results = [];
-    const DAYS_TO_COVER = 15; // Queremos cobertura para 15 días
-    const diasOperando = 19; // TODO: Calcular dinámicamente
-
-    for (const mover of allSoldProducts) {
-      // Odoo suele exportar las ventas como "[REF] Nombre", pero el inventario a veces solo como "Nombre".
-      const cleanOdooName = mover.name.replace(/^\[.*?\]\s*/, '').toLowerCase().trim();
-      
-      // Buscar en el inventario local para ver cuánto tenemos
-      const stockItem = inventario.find(i => {
-        const cleanInvName = i.product_name.replace(/^\[.*?\]\s*/, '').toLowerCase().trim();
-        return cleanInvName === cleanOdooName;
-      });
-      const stockActual = stockItem ? stockItem.stock : 0;
-      
-      // Velocidad de venta diaria
+    // 4. Evaluar cobertura de cada producto vendido
+    const results: RestockSuggestion[] = [];
+    productSales.forEach(mover => {
+      const stockActual = mover.stockItem ? mover.stockItem.stock : 0;
       const ventaDiaria = mover.qty / diasOperando;
       const stockDeseado = Math.ceil(ventaDiaria * DAYS_TO_COVER);
-      
       const faltante = stockDeseado - stockActual;
+      if (faltante <= 0) return;
 
-      // Sugerimos si el faltante es mayor a 0 (estamos cortos de inventario)
-      if (faltante > 0) {
-        const match = findMatch(mover.name);
-        if (match && match.offers.length > 0) {
-          const bestOffer = [...match.offers].sort((a, b) => a.netPrice - b.netPrice)[0];
-          
-          let suggestedQty = Math.ceil(faltante / 10) * 10;
-          if (suggestedQty < 10) suggestedQty = Math.ceil(faltante);
+      const match = findMatch(mover.name);
+      if (!match) return;
+      // Nunca proponer ofertas "Consultar" (precio 0) como mejor opción
+      const bestOffer = match.offers.filter(o => o.netPrice > 0).sort((a, b) => a.netPrice - b.netPrice)[0];
+      if (!bestOffer) return;
 
-          results.push({
-            odooName: mover.name,
-            soldQty: mover.qty,
-            stockActual,
-            stockDeseado,
-            faltante,
-            isCritical: stockActual === 0, // 🚨 CRITICO: Quiebre de stock
-            match: match,
-            bestOffer: bestOffer,
-            suggestedQty: suggestedQty
-          });
-        }
-      }
-    }
+      let suggestedQty = Math.ceil(faltante / 10) * 10;
+      if (suggestedQty < 10) suggestedQty = Math.ceil(faltante);
 
-    // 4. Ordenar: Primero los críticos (stock 0) ordenados por cantidad vendida, luego el resto por faltante
+      results.push({
+        odooName: mover.name,
+        soldQty: mover.qty,
+        stockActual,
+        stockDeseado,
+        faltante,
+        isCritical: stockActual === 0, // Quiebre de stock
+        match,
+        bestOffer,
+        suggestedQty
+      });
+    });
+
+    // 5. Ordenar: críticos primero (por volumen vendido), luego por faltante
     results.sort((a, b) => {
       if (a.isCritical && !b.isCritical) return -1;
       if (!a.isCritical && b.isCritical) return 1;
-      if (a.isCritical && b.isCritical) return b.soldQty - a.soldQty; // Ambos críticos: el que más se vende
-      return b.faltante - a.faltante; // No críticos: el que le falte más
+      if (a.isCritical && b.isCritical) return b.soldQty - a.soldQty;
+      return b.faltante - a.faltante;
     });
 
-    // Limitar a top 50 sugerencias para no saturar
     return results.slice(0, 50);
   }, [ventas, productos, inventario]);
 
   const [customQtys, setCustomQtys] = useState<Record<string, number>>({});
 
-  const handleQtyChange = (odooName: string, delta: number) => {
+  const qtyFor = (s: RestockSuggestion) => customQtys[s.odooName] ?? s.suggestedQty;
+
+  const handleQtyChange = (s: RestockSuggestion, delta: number) => {
     setCustomQtys(prev => ({
       ...prev,
-      [odooName]: Math.max(1, (prev[odooName] || 1) + delta)
+      [s.odooName]: Math.max(1, qtyFor(s) + delta)
     }));
   };
 
-  const handleAdd = (suggestion: any) => {
-    const qty = customQtys[suggestion.odooName] || 1;
-    onAddToCart(suggestion.match, suggestion.bestOffer, qty);
+  const handleAdd = (suggestion: RestockSuggestion) => {
+    onAddToCart(suggestion.match, suggestion.bestOffer, qtyFor(suggestion));
     setAddedItems(prev => new Set(prev).add(suggestion.odooName));
   };
 
@@ -142,8 +144,7 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
     setTimeout(() => {
       suggestions.forEach(s => {
         if (!addedItems.has(s.odooName)) {
-          const qty = customQtys[s.odooName] || 1;
-          onAddToCart(s.match, s.bestOffer, qty);
+          onAddToCart(s.match, s.bestOffer, qtyFor(s));
           setAddedItems(prev => new Set(prev).add(s.odooName));
         }
       });
@@ -181,20 +182,20 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
         <div className="absolute top-0 right-0 p-8 opacity-10">
           <Sparkles className="w-32 h-32" />
         </div>
-        
+
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 rounded-full text-sm font-bold tracking-wider mb-4 border border-white/30 backdrop-blur-md">
             <Zap className="w-4 h-4 text-amber-300" fill="currentColor" /> AXIA AI
           </div>
           <h2 className="text-3xl font-black mb-2">Asistente de Reabastecimiento</h2>
           <p className="text-indigo-100 max-w-xl text-lg">
-            He cruzado tus {ventas.length} ventas con los precios actuales de tus catálogos. 
+            He cruzado tus {ventas.length} ventas con los precios actuales de tus catálogos.
             Aquí tienes las mejores opciones para reabastecer tu alta rotación hoy.
           </p>
-          
+
           {suggestions.length > 0 && (
             <div className="mt-8 flex gap-4">
-              <button 
+              <button
                 onClick={addAll}
                 disabled={isCalculating || addedItems.size === suggestions.length}
                 className="bg-white text-indigo-600 px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -215,11 +216,11 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
         ) : (
           suggestions.map((s, idx) => {
             const isAdded = addedItems.has(s.odooName);
-            
+
             return (
               <div key={idx} className={cn("bg-white rounded-xl p-5 border transition-all duration-300", isAdded ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200 hover:border-indigo-300 hover:shadow-md")}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  
+
                   {/* Odoo Side */}
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-4 mb-2">
@@ -239,7 +240,7 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
                       </div>
                     </div>
                     <h3 className="font-bold text-slate-800">{s.odooName}</h3>
-                    <p className="text-xs text-slate-400 mt-1">Sugerido por IA para cubrir 15 días (Faltan {Math.ceil(s.faltante)} unid.)</p>
+                    <p className="text-xs text-slate-400 mt-1">Sugerido por IA para cubrir {DAYS_TO_COVER} días (Faltan {Math.ceil(s.faltante)} unid.)</p>
                   </div>
 
                   <ArrowRight className="hidden md:block w-5 h-5 text-slate-300 shrink-0" />
@@ -259,19 +260,19 @@ export default function SmartRestock({ ventas, productos, inventario, onAddToCar
                   {/* Action Side */}
                   <div className="flex flex-col items-end justify-center min-w-30 shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
                     <p className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-wider">Sugerido por IA: {s.suggestedQty} u.</p>
-                    
+
                     {!isAdded ? (
                       <div className="flex flex-col items-center gap-2 w-full">
                         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 w-full justify-between">
-                          <button onClick={() => handleQtyChange(s.odooName, -1)} className="p-1.5 text-slate-600 hover:bg-white rounded shadow-sm bg-slate-200/50 transition-colors">
+                          <button onClick={() => handleQtyChange(s, -1)} className="p-1.5 text-slate-600 hover:bg-white rounded shadow-sm bg-slate-200/50 transition-colors">
                             <Minus className="w-4 h-4" />
                           </button>
-                          <span className="font-black text-slate-800 text-sm">{customQtys[s.odooName] || 1}</span>
-                          <button onClick={() => handleQtyChange(s.odooName, 1)} className="p-1.5 text-slate-600 hover:bg-white rounded shadow-sm bg-slate-200/50 transition-colors">
+                          <span className="font-black text-slate-800 text-sm">{qtyFor(s)}</span>
+                          <button onClick={() => handleQtyChange(s, 1)} className="p-1.5 text-slate-600 hover:bg-white rounded shadow-sm bg-slate-200/50 transition-colors">
                             <Plus className="w-4 h-4" />
                           </button>
                         </div>
-                        <button 
+                        <button
                           onClick={() => handleAdd(s)}
                           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors text-sm"
                         >

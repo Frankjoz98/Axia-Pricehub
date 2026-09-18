@@ -4,7 +4,7 @@ import type { CartItem } from '../types';
 
 export const generatePurchaseOrderPDF = async (provider: string, items: CartItem[]) => {
   const doc = new jsPDF();
-  
+
   // Try to load the logo
   let imgData = null;
   try {
@@ -25,17 +25,17 @@ export const generatePurchaseOrderPDF = async (provider: string, items: CartItem
   if (imgData) {
     doc.addImage(imgData, 'PNG', 14, 10, 40, 40, undefined, 'FAST');
   }
-  
+
   doc.setFontSize(22);
   doc.setTextColor(40);
   doc.text('ORDEN DE COMPRA', imgData ? 60 : 14, 25);
-  
+
   doc.setFontSize(10);
   doc.setTextColor(100);
   const dateStr = new Date().toLocaleDateString('es-NI', { year: 'numeric', month: 'long', day: 'numeric' });
   doc.text(`Fecha: ${dateStr}`, imgData ? 60 : 14, 32);
   doc.text(`Farmacia Axia 24/7`, imgData ? 60 : 14, 38);
-  
+
   doc.setFontSize(14);
   doc.setTextColor(0);
   doc.text(`Proveedor: ${provider}`, 14, 60);
@@ -75,7 +75,7 @@ export const generatePurchaseOrderPDF = async (provider: string, items: CartItem
     }
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY || 65;
+  const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 65;
   doc.setFontSize(12);
   doc.setTextColor(0);
   doc.text(`Total Interno: C$ ${total.toFixed(2)}`, 140, finalY + 10);

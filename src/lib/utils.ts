@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { CartItem, UnifiedProduct } from '../types';
+import { todayYMD } from './dates';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -35,7 +36,7 @@ export function exportCartToCSV(cart: CartItem[], providerName?: string) {
   const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  const fileName = providerName ? `Axia_Pedido_${providerName.replace(/\\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv` : `Axia_Pedido_${new Date().toISOString().split('T')[0]}.csv`;
+  const fileName = providerName ? `Axia_Pedido_${providerName.replace(/\s+/g, '_')}_${todayYMD()}.csv` : `Axia_Pedido_${todayYMD()}.csv`;
   link.download = fileName;
   link.click();
 }
@@ -59,10 +60,19 @@ export function generateWhatsAppMessage(cart: CartItem[]): string {
   return encodeURIComponent(message);
 }
 
-export function downloadFile(data: any, filename: string, type: string = 'application/json') {
+export function downloadFile(data: unknown, filename: string, type: string = 'application/json') {
   const blob = new Blob([typeof data === 'string' ? data : JSON.stringify(data, null, 2)], { type });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = filename;
   link.click();
+}
+
+/** Mensaje legible de cualquier error (Error, PostgrestError, string...). Evita `catch (err: any)`. */
+export function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+    return (err as { message: string }).message;
+  }
+  return String(err);
 }

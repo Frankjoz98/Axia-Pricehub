@@ -1,13 +1,14 @@
 import { TrendingUp, DollarSign, Download } from 'lucide-react';
+import type { BusinessMetrics } from '../../hooks/useBusinessMetrics';
 
 interface OverviewTabProps {
-  metrics: any;
+  metrics: BusinessMetrics;
   onOpenReportModal: () => void;
 }
 
 export default function OverviewTab({ metrics, onOpenReportModal }: OverviewTabProps) {
   if (!metrics) return null;
-  
+
   return (
     <>
       <div className="flex justify-end mb-4">
@@ -19,7 +20,7 @@ export default function OverviewTab({ metrics, onOpenReportModal }: OverviewTabP
         <div className="bg-white rounded-xl p-5 text-slate-900 shadow-sm border border-slate-100">
           <h3 className="font-black text-lg mb-4 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-rose-500" /> Alta Rotación (Unidades)</h3>
           <div className="space-y-2.5">
-            {metrics.topMovers.map((p: any, i: number) => (
+            {metrics.topMovers.map((p, i) => (
               <div key={p.fullName} className="flex justify-between items-center border-b border-slate-50 pb-2">
                 <div className="flex items-center gap-3">
                   <span className="text-slate-300 font-black w-5 text-right">{i + 1}</span>
@@ -34,7 +35,7 @@ export default function OverviewTab({ metrics, onOpenReportModal }: OverviewTabP
         <div className="bg-white rounded-xl p-5 text-slate-900 shadow-sm border border-slate-100">
           <h3 className="font-black text-lg mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-500" /> Reyes del Margen (Ganancia)</h3>
           <div className="space-y-2.5">
-            {metrics.topMargin.map((p: any, i: number) => (
+            {metrics.topMargin.map((p, i) => (
               <div key={p.fullName} className="flex justify-between items-center border-b border-slate-50 pb-2">
                 <div className="flex items-center gap-3">
                   <span className="text-slate-300 font-black w-5 text-right">{i + 1}</span>

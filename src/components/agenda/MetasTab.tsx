@@ -59,15 +59,15 @@ export default function MetasTab() {
   };
 
   const handleToggleChecklistItem = async (meta: Meta, itemId: string) => {
-    const updatedChecklist = meta.checklist.map(i => 
+    const updatedChecklist = meta.checklist.map(i =>
       i.id === itemId ? { ...i, completado: !i.completado } : i
     );
-    
+
     const allCompleted = updatedChecklist.length > 0 && updatedChecklist.every(i => i.completado);
-    
-    await updateMeta(meta.id, { 
+
+    await updateMeta(meta.id, {
       checklist: updatedChecklist,
-      completada: allCompleted 
+      completada: allCompleted
     });
   };
 
@@ -91,7 +91,7 @@ export default function MetasTab() {
         <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
           <Target className="w-5 h-5 text-indigo-500" /> Metas Activas ({metas.filter(m => !m.completada).length})
         </h2>
-        <button 
+        <button
           onClick={() => openModal()}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition-all"
         >
@@ -144,7 +144,7 @@ export default function MetasTab() {
                   <span className={meta.completada ? "text-emerald-600" : "text-indigo-600"}>{progress}%</span>
                 </div>
                 <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className={cn("h-full rounded-full transition-all duration-500", meta.completada ? "bg-emerald-500" : "bg-indigo-500")}
                     style={{ width: `${progress}%` }}
                   />
@@ -156,12 +156,12 @@ export default function MetasTab() {
                 <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
                   {meta.checklist.map(item => (
                     <div key={item.id} className="flex items-start gap-2 group">
-                      <button 
+                      <button
                         onClick={() => handleToggleChecklistItem(meta, item.id)}
                         className="mt-0.5 shrink-0"
                       >
-                        {item.completado ? 
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : 
+                        {item.completado ?
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" /> :
                           <Circle className="w-4 h-4 text-slate-300 group-hover:text-indigo-400" />
                         }
                       </button>
@@ -197,14 +197,14 @@ export default function MetasTab() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Prioridad</label>
-                  <select value={prioridad} onChange={e => setPrioridad(e.target.value as any)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                  <select value={prioridad} onChange={e => setPrioridad(e.target.value as Meta['prioridad'])} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
                     <option value="baja">Baja</option>
                     <option value="media">Media</option>
                     <option value="alta">Alta</option>
                   </select>
                 </div>
               </div>
-              
+
               <div className="pt-2">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Checklist de Tareas</label>
                 <div className="space-y-2 mb-3">
@@ -217,13 +217,13 @@ export default function MetasTab() {
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={newItemText} 
-                    onChange={e => setNewItemText(e.target.value)} 
+                  <input
+                    type="text"
+                    value={newItemText}
+                    onChange={e => setNewItemText(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addChecklistItem())}
-                    className="flex-1 p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl" 
-                    placeholder="Agregar tarea al checklist..." 
+                    className="flex-1 p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl"
+                    placeholder="Agregar tarea al checklist..."
                   />
                   <button type="button" onClick={addChecklistItem} className="px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold transition-colors">Add</button>
                 </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, NotebookPen, Calendar, Trash2, ArrowRight, Edit2 } from 'lucide-react';
 import { useBitacora } from '../../hooks/useBitacora';
-import type { CategoriaBitacora } from '../../types';
+import type { CategoriaBitacora, BitacoraEntry } from '../../types';
 import { cn } from '../../lib/utils';
 
 export default function BitacoraTab() {
@@ -19,7 +19,7 @@ export default function BitacoraTab() {
   const filtered = entradas.filter(e => filter === 'todas' || e.categoria === filter);
   const selectedEntry = entradas.find(e => e.id === selectedEntryId);
 
-  const openModal = (entrada?: any) => {
+  const openModal = (entrada?: BitacoraEntry) => {
     if (entrada) {
       setEditingId(entrada.id);
       setTitulo(entrada.titulo);
@@ -39,7 +39,7 @@ export default function BitacoraTab() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titulo.trim() || !contenido.trim()) return;
-    
+
     if (editingId) {
       await updateEntrada(editingId, {
         titulo,
@@ -55,7 +55,7 @@ export default function BitacoraTab() {
         vinculado_a_reunion: vinculado || undefined
       });
     }
-    
+
     setTitulo('');
     setContenido('');
     setCategoria('general');
@@ -77,17 +77,17 @@ export default function BitacoraTab() {
       {/* Header Bar */}
       <div className="flex justify-between items-center bg-white p-4 border-b border-slate-200 shrink-0">
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {['todas', 'general', 'operativo', 'comercial', 'reunion', 'sistema'].map(c => (
+          {(['todas', 'general', 'operativo', 'comercial', 'reunion', 'sistema'] as const).map(c => (
             <button
               key={c}
               onClick={() => {
-                setFilter(c as any);
+                setFilter(c);
                 setSelectedEntryId(null); // Reset selection when filtering
               }}
               className={cn(
                 "px-4 py-2 rounded-xl text-sm font-bold capitalize whitespace-nowrap transition-colors border",
-                filter === c 
-                  ? "bg-slate-900 text-white border-slate-900" 
+                filter === c
+                  ? "bg-slate-900 text-white border-slate-900"
                   : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
               )}
             >
@@ -95,7 +95,7 @@ export default function BitacoraTab() {
             </button>
           ))}
         </div>
-        <button 
+        <button
           onClick={() => openModal()}
           className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700 transition-all shrink-0 shadow-md shadow-violet-600/20 active:scale-95"
         >
@@ -128,7 +128,7 @@ export default function BitacoraTab() {
                     )}
                   >
                     {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-violet-600" />}
-                    
+
                     <div className="flex justify-between items-start mb-1.5">
                       <span className={cn("text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border", catColors[entrada.categoria])}>
                         {entrada.categoria}
@@ -137,11 +137,11 @@ export default function BitacoraTab() {
                         {new Date(entrada.created_at).toLocaleDateString('es-NI', { day: '2-digit', month: 'short' })}
                       </span>
                     </div>
-                    
+
                     <h4 className={cn("font-bold text-sm leading-tight line-clamp-2 mb-1", isSelected ? "text-violet-700" : "text-slate-800")}>
                       {entrada.titulo}
                     </h4>
-                    
+
                     <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
                       {entrada.contenido}
                     </p>
@@ -168,22 +168,22 @@ export default function BitacoraTab() {
                   </div>
                   <h2 className="text-3xl font-black text-slate-900 leading-tight">{selectedEntry.titulo}</h2>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => openModal(selectedEntry)} 
+                  <button
+                    onClick={() => openModal(selectedEntry)}
                     className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-colors border border-transparent hover:border-blue-100"
                     title="Editar registro"
                   >
                     <Edit2 className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={() => { 
+                  <button
+                    onClick={() => {
                       if(confirm('¿Seguro que deseas eliminar este registro?')) {
                         deleteEntrada(selectedEntry.id);
                         setSelectedEntryId(null);
                       }
-                    }} 
+                    }}
                     className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100"
                     title="Eliminar registro"
                   >
@@ -229,13 +229,13 @@ export default function BitacoraTab() {
               </div>
               <h2 className="text-2xl font-black text-slate-900">{editingId ? 'Editar Avance' : 'Registrar Avance'}</h2>
             </div>
-            
+
             <form onSubmit={handleSave} className="space-y-5">
               <div>
                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2">Título del Hito</label>
                 <input type="text" required value={titulo} onChange={e => setTitulo(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 rounded-2xl transition-all font-bold text-slate-800 outline-none" placeholder="Ej. Se contrataron 2 enfermeras" />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2">Categoría</label>
@@ -257,7 +257,7 @@ export default function BitacoraTab() {
                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2">Detalles Completos</label>
                 <textarea rows={5} required value={contenido} onChange={e => setContenido(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 rounded-2xl transition-all text-slate-700 outline-none resize-none leading-relaxed" placeholder="Describe los avances, decisiones tomadas, contexto histórico..." />
               </div>
-              
+
               <div className="pt-2 flex gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-50 font-black rounded-2xl text-slate-600 transition-colors">Cancelar</button>
                 <button type="submit" className="flex-1 py-4 bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-900/20 font-black rounded-2xl text-white transition-all active:scale-95 flex items-center justify-center gap-2">

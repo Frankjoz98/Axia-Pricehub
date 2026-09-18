@@ -1,4 +1,5 @@
 import { X, Printer, Calendar } from 'lucide-react';
+import { toLocalYMD } from '../../lib/dates';
 
 interface ReportExportModalProps {
   isOpen: boolean;
@@ -9,10 +10,10 @@ interface ReportExportModalProps {
   setReportEndDate: (date: string) => void;
 }
 
-export default function ReportExportModal({ 
-  isOpen, onClose, 
-  reportStartDate, setReportStartDate, 
-  reportEndDate, setReportEndDate 
+export default function ReportExportModal({
+  isOpen, onClose,
+  reportStartDate, setReportStartDate,
+  reportEndDate, setReportEndDate
 }: ReportExportModalProps) {
 
   if (!isOpen) return null;
@@ -26,18 +27,18 @@ export default function ReportExportModal({
 
   const setPresetRange = (preset: 'week' | 'month' | 'current_month') => {
     const today = new Date();
-    setReportEndDate(today.toISOString().split('T')[0]);
+    setReportEndDate(toLocalYMD(today));
     if (preset === 'week') {
       const past = new Date(today);
       past.setDate(past.getDate() - 7);
-      setReportStartDate(past.toISOString().split('T')[0]);
+      setReportStartDate(toLocalYMD(past));
     } else if (preset === 'month') {
       const past = new Date(today);
       past.setMonth(past.getMonth() - 1);
-      setReportStartDate(past.toISOString().split('T')[0]);
+      setReportStartDate(toLocalYMD(past));
     } else if (preset === 'current_month') {
       const start = new Date(today.getFullYear(), today.getMonth(), 1);
-      setReportStartDate(start.toISOString().split('T')[0]);
+      setReportStartDate(toLocalYMD(start));
     }
   };
 
@@ -51,7 +52,7 @@ export default function ReportExportModal({
           <Printer className="w-6 h-6 text-indigo-600" /> Exportar Reporte PDF
         </h3>
         <p className="text-sm text-slate-500 mb-6">El reporte incluirá todas las transacciones, márgenes y gráficas generadas en el período seleccionado.</p>
-        
+
         <div className="space-y-4 mb-8">
           <div className="grid grid-cols-3 gap-2">
             <button onClick={() => setPresetRange('week')} className="px-2 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Últimos 7 días</button>

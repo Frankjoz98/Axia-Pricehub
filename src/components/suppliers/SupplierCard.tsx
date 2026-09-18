@@ -1,6 +1,7 @@
 import { Building2, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Proveedor, FacturaCompra } from '../../types';
+import { isFacturaVencida, isFacturaPendienteVigente } from '../../lib/facturas';
 
 interface SupplierCardProps {
   proveedor: Proveedor;
@@ -10,12 +11,12 @@ interface SupplierCardProps {
 
 export function SupplierCard({ proveedor, facturas, onClick }: SupplierCardProps) {
   const totalComprado = facturas.reduce((acc, f) => acc + f.monto_total, 0);
-  const facturasPendientes = facturas.filter(f => f.estado === 'pendiente');
-  const facturasVencidas = facturas.filter(f => f.estado === 'vencida' || (f.estado === 'pendiente' && f.fecha_vencimiento && new Date(f.fecha_vencimiento) < new Date()));
+  const facturasPendientes = facturas.filter(f => isFacturaPendienteVigente(f));
+  const facturasVencidas = facturas.filter(f => isFacturaVencida(f));
   const totalPendiente = facturasPendientes.reduce((acc, f) => acc + f.monto_total, 0);
 
   return (
-    <div 
+    <div
       onClick={onClick}
       className={cn(
         "bg-white rounded-2xl border p-5 transition-all cursor-pointer hover:shadow-lg group",
@@ -45,7 +46,7 @@ export function SupplierCard({ proveedor, facturas, onClick }: SupplierCardProps
           <span className="text-slate-500">Total Comprado</span>
           <span className="font-semibold text-slate-700">C$ {totalComprado.toLocaleString('es-NI')}</span>
         </div>
-        
+
         {totalPendiente > 0 && (
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-500">Pendiente de Pago</span>

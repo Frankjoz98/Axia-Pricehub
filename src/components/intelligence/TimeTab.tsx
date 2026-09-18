@@ -1,15 +1,22 @@
 import { Clock, TrendingUp } from 'lucide-react';
 import { ComposedChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { cn } from '../../lib/utils';
+import type { BusinessMetrics, TrendPoint } from '../../hooks/useBusinessMetrics';
 
 interface TimeTabProps {
-  metrics: any;
+  metrics: BusinessMetrics;
   timeGrouping: 'daily' | 'weekly' | 'monthly';
   setTimeGrouping: (val: 'daily' | 'weekly' | 'monthly') => void;
   onDrillDown?: (dateStr: string) => void;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TrendTooltipProps {
+  active?: boolean;
+  payload?: { payload: TrendPoint }[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload, label }: TrendTooltipProps) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const totalVenta = (data.turno1 || 0) + (data.turno2 || 0) + (data.turno3 || 0);
@@ -30,8 +37,24 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+// Recharts entrega el punto clicado en `payload`; se extrae de forma segura sin `any`
+function trendPointFrom(data: unknown): TrendPoint | undefined {
+  if (typeof data !== 'object' || data === null) return undefined;
+  const maybe = data as { payload?: TrendPoint; time?: string };
+  if (maybe.payload && typeof maybe.payload === 'object') return maybe.payload;
+  if (typeof maybe.time === 'string') return maybe as unknown as TrendPoint;
+  return undefined;
+}
+
 export default function TimeTab({ metrics, timeGrouping, setTimeGrouping, onDrillDown }: TimeTabProps) {
   if (!metrics) return null;
+
+  const handleBarClick = (data: unknown) => {
+    if (!onDrillDown) return;
+    const point = trendPointFrom(data);
+    if (!point) return;
+    onDrillDown(point.sessionIds && point.sessionIds.length > 0 ? 'sessions:' + point.sessionIds.join(',') : point.time);
+  };
 
   return (
     <div className="space-y-6">
@@ -46,7 +69,7 @@ export default function TimeTab({ metrics, timeGrouping, setTimeGrouping, onDril
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} angle={-45} textAnchor="end" />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: any, name: any) => [name === 'revenue' ? `C$ ${Number(v).toFixed(0)}` : v, name === 'revenue' ? 'Ventas' : 'Transacciones']} cursor={{ fill: '#f8fafc' }} />
+              <Tooltip formatter={(v, name) => [name === 'revenue' ? `C$ ${Number(v).toFixed(0)}` : String(v), name === 'revenue' ? 'Ventas' : 'Transacciones']} cursor={{ fill: '#f8fafc' }} />
               <Bar dataKey="revenue" fill="#f97316" radius={[4, 4, 0, 0]} name="revenue" maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
@@ -62,7 +85,7 @@ export default function TimeTab({ metrics, timeGrouping, setTimeGrouping, onDril
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: any, name: any) => [name === 'revenue' ? `C$ ${Number(v).toFixed(0)}` : v, name === 'revenue' ? 'Ventas' : 'Transacciones']} cursor={{ fill: '#f8fafc' }} />
+              <Tooltip formatter={(v, name) => [name === 'revenue' ? `C$ ${Number(v).toFixed(0)}` : String(v), name === 'revenue' ? 'Ventas' : 'Transacciones']} cursor={{ fill: '#f8fafc' }} />
               <Bar dataKey="revenue" fill="#6366f1" radius={[4, 4, 0, 0]} name="revenue" maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
@@ -83,12 +106,12 @@ export default function TimeTab({ metrics, timeGrouping, setTimeGrouping, onDril
         <ResponsiveContainer width="100%" height={300} className="overflow-hidden">
           <ComposedChart data={metrics.trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-            <XAxis 
-              dataKey="time" 
-              tick={{ fontSize: 11 }} 
-              angle={timeGrouping === 'daily' ? -45 : 0} 
-              textAnchor={timeGrouping === 'daily' ? 'end' : 'middle'} 
-              height={40} 
+            <XAxis
+              dataKey="time"
+              tick={{ fontSize: 11 }}
+              angle={timeGrouping === 'daily' ? -45 : 0}
+              textAnchor={timeGrouping === 'daily' ? 'end' : 'middle'}
+              height={40}
               tickFormatter={(val) => {
                 if (timeGrouping === 'daily' && val.includes('-')) {
                   const parts = val.split('-');
@@ -110,9 +133,9 @@ export default function TimeTab({ metrics, timeGrouping, setTimeGrouping, onDril
             <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9' }} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }} />
-            <Bar dataKey="turno1" stackId="a" fill="#10b981" name="Mañana" maxBarSize={50} isAnimationActive={false} cursor="pointer" onClick={(data: any) => onDrillDown && onDrillDown(data?.payload?.sessionIds && data.payload.sessionIds.length > 0 ? 'sessions:' + data.payload.sessionIds.join(',') : (data?.payload?.time || data?.time))} />
-            <Bar dataKey="turno2" stackId="a" fill="#f59e0b" name="Tarde" maxBarSize={50} isAnimationActive={false} cursor="pointer" onClick={(data: any) => onDrillDown && onDrillDown(data?.payload?.sessionIds && data.payload.sessionIds.length > 0 ? 'sessions:' + data.payload.sessionIds.join(',') : (data?.payload?.time || data?.time))} />
-            <Bar dataKey="turno3" stackId="a" fill="#3b82f6" name="Noche" maxBarSize={50} isAnimationActive={false} radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data: any) => onDrillDown && onDrillDown(data?.payload?.sessionIds && data.payload.sessionIds.length > 0 ? 'sessions:' + data.payload.sessionIds.join(',') : (data?.payload?.time || data?.time))} />
+            <Bar dataKey="turno1" stackId="a" fill="#10b981" name="Mañana" maxBarSize={50} isAnimationActive={false} cursor="pointer" onClick={handleBarClick} />
+            <Bar dataKey="turno2" stackId="a" fill="#f59e0b" name="Tarde" maxBarSize={50} isAnimationActive={false} cursor="pointer" onClick={handleBarClick} />
+            <Bar dataKey="turno3" stackId="a" fill="#3b82f6" name="Noche" maxBarSize={50} isAnimationActive={false} radius={[4, 4, 0, 0]} cursor="pointer" onClick={handleBarClick} />
             <Line type="monotone" dataKey="margin" stroke="#ef4444" strokeWidth={3} dot={false} name="Margen Bruto" isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>

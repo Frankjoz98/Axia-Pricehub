@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Upload, Trash2, Download, RefreshCw, FileSpreadsheet, Package, UploadCloud, Sliders, Settings } from 'lucide-react';
 import Papa from 'papaparse';
-import { cn, downloadFile, toDbProduct } from '../lib/utils';
+import { cn, downloadFile, toDbProduct, errorMessage } from '../lib/utils';
+import { csvGetVal, csvNumber, type CsvRow } from '../lib/csv';
 import { supabase } from '../supabase';
-import type { AppConfig, UnifiedProduct, VentaHistorica, OdooInventario } from '../types';
+import type { AppConfig, UnifiedProduct, VentaHistorica, OdooInventario, SupplierOffer } from '../types';
+import { todayYMD } from '../lib/dates';
 
 interface SettingsPanelProps {
   config: AppConfig;
@@ -23,6 +25,10 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
   const [isUploadingInventario, setIsUploadingInventario] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [localConfig, setLocalConfig] = useState(config);
+
+  // Si la configuración de la nube llega después del montaje (recarga en /settings),
+  // el formulario debe reflejarla: de lo contrario "Guardar" pisaría la nube con los valores por defecto.
+  useEffect(() => { setLocalConfig(config); }, [config]);
 
   const [dragActiveVentas, setDragActiveVentas] = useState(false);
   const [dragActiveCatalog, setDragActiveCatalog] = useState(false);
@@ -45,14 +51,14 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
 
   const clearVentas = async () => {
     if (!confirm('⚠️ ADVERTENCIA: Estás a punto de ELIMINAR TODO EL HISTÓRICO DE VENTAS de la base de datos. Esto es útil si vas a subir un nuevo reporte completo y quieres evitar duplicados. ¿Estás absolutamente seguro?')) return;
-    
+
     try {
       const { error } = await supabase.from('ventas_historicas').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (error) throw error;
       alert('✅ Histórico de ventas purgado con éxito. Ahora puedes subir el archivo CSV fresco.');
       onRefreshVentas();
-    } catch (err: any) {
-      alert('Error vaciando ventas: ' + err.message);
+    } catch (err) {
+      alert('Error vaciando ventas: ' + errorMessage(err));
     }
   };
 
@@ -84,20 +90,13 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          const rows = results.data as any[];
-          
+          const rows = results.data as CsvRow[];
+
           if (rows.length > 0) {
             console.log("Ventas - Primera fila detectada:", Object.keys(rows[0]));
           }
 
-          const getVal = (row: any, keys: string[]) => {
-            const rowKeys = Object.keys(row);
-            for (const searchKey of keys) {
-              const match = rowKeys.find(k => k.toLowerCase().trim() === searchKey.toLowerCase().trim());
-              if (match && row[match]) return row[match];
-            }
-            return '';
-          };
+          const getVal = csvGetVal;
 
           let lastOrderRef = '';
           let lastDate: string | null = null;
@@ -110,11 +109,11 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
           const rawPayload = [];
           for (const row of rows) {
             const orderRefRaw = getVal(row, ['Ref. de la orden', 'Referencia de la orden', 'Referencia']);
-            
+
             // Si la referencia contiene palabras clave de ajustes de inventario, ignoramos la fila
             if (orderRefRaw && (
-              orderRefRaw.toLowerCase().includes('actualizada') || 
-              orderRefRaw.toLowerCase().includes('ajuste') || 
+              orderRefRaw.toLowerCase().includes('actualizada') ||
+              orderRefRaw.toLowerCase().includes('ajuste') ||
               orderRefRaw.toLowerCase().includes('adjustment') ||
               orderRefRaw.toLowerCase().includes('inventario')
             )) {
@@ -129,7 +128,8 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
             if (orderRefRaw) {
               lastOrderRef = orderRefRaw;
               const dateVal = getVal(row, ['Fecha']);
-              lastDate = dateVal ? new Date(dateVal.replace(' ', 'T')).toISOString() : null;
+              const parsedDate = dateVal ? new Date(dateVal.replace(' ', 'T')) : null;
+              lastDate = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null;
               lastCajero = getVal(row, ['Cajero']) || 'Sin Asignar';
               lastVendedor = getVal(row, ['Vendedor']) || 'Sin Asignar';
               lastCliente = getVal(row, ['Cliente']) || 'Consumidor Final';
@@ -143,8 +143,10 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
 
             const odoo_id = getVal(row, ['Líneas de la orden/Producto/ID', 'ID', 'odoo_id']);
             const product_name = getVal(row, ['Líneas de la orden/Producto/Nombre', 'Líneas de la orden/Nombre completo del producto', 'Producto', 'Nombre']);
-            
+
             if (!product_name) continue;
+            // Sin fecha no hay forma de ubicar la venta en el tiempo: se descarta en vez de caer en 1970
+            if (!lastDate) continue;
 
             rawPayload.push({
               order_ref: lastOrderRef,
@@ -156,9 +158,9 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
               cajero: lastCajero,
               vendedor: lastVendedor,
               cliente: lastCliente,
-              quantity: parseFloat(String(getVal(row, ['Líneas de la orden/Cantidad', 'Cantidad']) || '0').replace(/,/g, '')),
-              unit_price: parseFloat(String(getVal(row, ['Líneas de la orden/Precio unitario', 'Precio unitario']) || '0').replace(/,/g, '')),
-              total_cost: parseFloat(String(getVal(row, ['Líneas de la orden/Costo total', 'Costo total']) || '0').replace(/,/g, '')),
+              quantity: csvNumber(getVal(row, ['Líneas de la orden/Cantidad', 'Cantidad'])),
+              unit_price: csvNumber(getVal(row, ['Líneas de la orden/Precio unitario', 'Precio unitario'])),
+              total_cost: csvNumber(getVal(row, ['Líneas de la orden/Costo total', 'Costo total'])),
               sesion: lastSesion
             });
           }
@@ -168,9 +170,9 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
           for (const row of rawPayload) {
             // Ignorar filas huerfanas (sin order_ref)
             if (!row.order_ref) continue;
-            
+
             const line_id = `${row.sesion}-${row.order_ref}-${row.odoo_id || row.product_name}`;
-            
+
             if (aggregatedPayloadMap.has(line_id)) {
               const existing = aggregatedPayloadMap.get(line_id);
               existing.quantity += row.quantity;
@@ -198,7 +200,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
           }
           alert(`✅ ${upsertPayload.length} registros procesados. Datos actualizados en la base de datos.`);
           onRefreshVentas();
-        } catch (err: any) { alert('Error: ' + err.message); }
+        } catch (err) { alert('Error: ' + errorMessage(err)); }
         finally { setIsUploading(false); }
       }
     });
@@ -217,20 +219,13 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          const rows = results.data as any[];
-          
+          const rows = results.data as CsvRow[];
+
           if (rows.length > 0) {
             console.log("Primera fila detectada:", Object.keys(rows[0]));
           }
 
-          const getVal = (row: any, keys: string[]) => {
-            const rowKeys = Object.keys(row);
-            for (const searchKey of keys) {
-              const match = rowKeys.find(k => k.toLowerCase().trim() === searchKey.toLowerCase().trim());
-              if (match && row[match]) return row[match];
-            }
-            return '';
-          };
+          const getVal = csvGetVal;
 
           const rawPayload = rows
             .map(row => {
@@ -294,7 +289,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
           }
           alert(`✅ ${upsertPayload.length} productos de inventario sincronizados (Snapshot). ${staleIds.length} productos ya no existen en Odoo y fueron retirados.`);
           if (onRefreshInventario) onRefreshInventario();
-        } catch (err: any) { alert('Error: ' + err.message); }
+        } catch (err) { alert('Error: ' + errorMessage(err)); }
         finally { setIsUploadingInventario(false); }
       }
     });
@@ -313,23 +308,16 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          const rows = results.data as any[];
-          
-          const getVal = (row: any, keys: string[]) => {
-            const rowKeys = Object.keys(row);
-            for (const searchKey of keys) {
-              const match = rowKeys.find(k => k.toLowerCase().trim() === searchKey.toLowerCase().trim());
-              if (match && row[match]) return row[match];
-            }
-            return '';
-          };
+          const rows = results.data as CsvRow[];
+
+          const getVal = csvGetVal;
 
           const lotesToUpdate = new Map<string, string>(); // referencia -> fecha más cercana
 
           rows.forEach(row => {
             const productoStr = getVal(row, ['Producto', 'Product']);
             let fechaStr = getVal(row, ['Fecha de caducidad', 'Expiration Date', 'expiration_time']);
-            
+
             if (!productoStr || !fechaStr || fechaStr === '0' || fechaStr === '') return;
 
             // Odoo's display_name format: "[REF] Product Name" or just "Product Name"
@@ -342,8 +330,8 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
             }
 
             // Buscar el id real del producto cruzando con el inventario actual
-            const matchedProduct = inventario?.find(i => 
-              (ref && i.referencia === ref) || 
+            const matchedProduct = inventario?.find(i =>
+              (ref && i.referencia === ref) ||
               (i.product_name.toLowerCase() === cleanName.toLowerCase())
             );
 
@@ -372,7 +360,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
           }
 
           const entries = Array.from(lotesToUpdate.entries());
-          
+
           // Actualizar en Supabase usando el ID (UUID)
           let updateCount = 0;
           for (let i = 0; i < entries.length; i += 20) {
@@ -389,7 +377,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
 
           alert(`✅ Se actualizaron las fechas de vencimiento de ${updateCount} productos.`);
           if (onRefreshInventario) onRefreshInventario();
-        } catch (err: any) { alert('Error: ' + err.message); }
+        } catch (err) { alert('Error: ' + errorMessage(err)); }
         finally { setIsUploadingLotes(false); }
       }
     });
@@ -408,38 +396,38 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          const rows = results.data as any[];
-          const existingMap = new Map(productos.map(p => [p.name.toLowerCase().trim(), JSON.parse(JSON.stringify(p))]));
+          const rows = results.data as CsvRow[];
+          const existingMap = new Map<string, UnifiedProduct>(productos.map(p => [p.name.toLowerCase().trim(), JSON.parse(JSON.stringify(p)) as UnifiedProduct]));
           let newProductsCount = 0;
           let updatedOffersCount = 0;
 
           rows.forEach(row => {
             // Flexible column resolution
             const name = (
-              row['nombre_producto'] || 
-              row['nombre'] || 
-              row['producto'] || 
-              row['descripcion'] || 
-              row['Descripcion'] || 
-              row['Producto'] || 
+              row['nombre_producto'] ||
+              row['nombre'] ||
+              row['producto'] ||
+              row['descripcion'] ||
+              row['Descripcion'] ||
+              row['Producto'] ||
               ''
             ).trim();
             if (!name) return;
 
             const provider = (
-              row['proveedor'] || 
-              row['laboratorio'] || 
-              row['marca'] || 
-              row['Marca'] || 
-              row['Proveedor'] || 
+              row['proveedor'] ||
+              row['laboratorio'] ||
+              row['marca'] ||
+              row['Marca'] ||
+              row['Proveedor'] ||
               'PAISAS'
             ).trim();
 
             const code = (
-              row['codigo_proveedor'] || 
-              row['codigo'] || 
-              row['Codigo'] || 
-              row['Código'] || 
+              row['codigo_proveedor'] ||
+              row['codigo'] ||
+              row['Codigo'] ||
+              row['Código'] ||
               ''
             ).trim();
 
@@ -451,9 +439,11 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
               String(row['descuento_porcentaje'] || row['descuento'] || row['Descuento'] || '0').replace(/,/g, '')
             ) || 0;
 
-            const netPrice = parseFloat(
-              String(row['precio_neto'] || row['precio'] || row['Precio'] || row['precio_base'] || '0').replace(/,/g, '')
-            ) || basePrice;
+            // Si la plantilla no trae precio_neto, se deriva de precio_base aplicando el descuento
+            const netPriceRaw = parseFloat(String(row['precio_neto'] || '').replace(/,/g, ''));
+            const netPrice = Number.isFinite(netPriceRaw) && netPriceRaw > 0
+              ? netPriceRaw
+              : Math.round(basePrice * (1 - discount / 100) * 100) / 100;
 
             const buy = parseInt(row['escala_compra'] || '0') || 0;
             const free = parseInt(row['escala_regalo'] || '0') || 0;
@@ -471,7 +461,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
 
             if (existingMap.has(nameKey)) {
               const p = existingMap.get(nameKey)!;
-              const idx = p.offers.findIndex((o: any) => o.provider.toLowerCase() === provider.toLowerCase());
+              const idx = p.offers.findIndex((o: SupplierOffer) => (o.provider || '').toLowerCase() === provider.toLowerCase());
               if (idx >= 0) {
                 p.offers[idx] = offer;
               } else {
@@ -484,7 +474,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
                 name,
                 activeIngredient: row['ingrediente_activo'] || row['principio_activo'] || provider,
                 category: row['categoria'] || 'General',
-                nivel: parseInt(row['nivel']) || 2,
+                nivel: ([1, 2, 3] as const).find(n => n === parseInt(row['nivel'] || '', 10)) ?? 2,
                 offers: [offer]
               });
               newProductsCount++;
@@ -492,12 +482,12 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
           });
 
           // Quitar propiedades solo-frontend antes de guardar en DB
-          const payload = Array.from(existingMap.values()).map(p => toDbProduct(p as UnifiedProduct));
+          const payload = Array.from(existingMap.values()).map(p => toDbProduct(p));
 
-          if (payload.length === 0) { 
-            alert("No se encontraron registros válidos en el archivo."); 
-            setIsUploadingCatalog(false); 
-            return; 
+          if (payload.length === 0) {
+            alert("No se encontraron registros válidos en el archivo.");
+            setIsUploadingCatalog(false);
+            return;
           }
 
           const chunkSize = 500;
@@ -509,10 +499,10 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
 
           alert(`✅ Catálogo sincronizado con éxito!\n• ${newProductsCount} productos nuevos agregados\n• ${updatedOffersCount} ofertas actualizadas\n• Total en base de datos: ${payload.length}`);
           onRefreshCatalog();
-        } catch (err: any) { 
-          alert('Error al subir catálogo: ' + err.message); 
-        } finally { 
-          setIsUploadingCatalog(false); 
+        } catch (err) {
+          alert('Error al subir catálogo: ' + errorMessage(err));
+        } finally {
+          setIsUploadingCatalog(false);
         }
       }
     });
@@ -597,7 +587,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h2 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2"><Upload className="w-5 h-5 text-blue-600" /> Importar Ventas Odoo</h2>
           <p className="text-sm text-slate-500 mb-4">Sube tu CSV de Odoo POS con ID del producto.</p>
-          <label 
+          <label
             onDragEnter={(e) => handleDrag(e, setDragActiveVentas)}
             onDragLeave={(e) => handleDrag(e, setDragActiveVentas)}
             onDragOver={(e) => handleDrag(e, setDragActiveVentas)}
@@ -613,7 +603,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h2 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-emerald-600" /> Importar Catálogo</h2>
           <p className="text-sm text-slate-500 mb-2">Sube la plantilla estándar de Axia para actualizar precios.</p>
-          <label 
+          <label
             onDragEnter={(e) => handleDrag(e, setDragActiveCatalog)}
             onDragLeave={(e) => handleDrag(e, setDragActiveCatalog)}
             onDragOver={(e) => handleDrag(e, setDragActiveCatalog)}
@@ -629,7 +619,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h2 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2"><Package className="w-5 h-5 text-indigo-600" /> Stock Real</h2>
           <p className="text-sm text-slate-500 mb-4">Exporta inventario de Odoo con la columna ID.</p>
-          <label 
+          <label
             onDragEnter={(e) => handleDrag(e, setDragActiveInventario)}
             onDragLeave={(e) => handleDrag(e, setDragActiveInventario)}
             onDragOver={(e) => handleDrag(e, setDragActiveInventario)}
@@ -648,7 +638,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <h2 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-rose-600" /> Fechas de Vencimiento (Lotes)</h2>
         <p className="text-sm text-slate-500 mb-4">Opcional: Exporta los Lotes/Números de Serie desde Odoo para sincronizar las fechas de caducidad en tu Agenda.</p>
-        <label 
+        <label
           onDragEnter={(e) => handleDrag(e, setDragActiveLotes)}
           onDragLeave={(e) => handleDrag(e, setDragActiveLotes)}
           onDragOver={(e) => handleDrag(e, setDragActiveLotes)}
@@ -665,7 +655,7 @@ export default function SettingsPanel({ config, setConfig, productos, ventas, on
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-slate-600" /> Herramientas</h2>
         <div className="grid grid-cols-1 sm:grid-cols-1 gap-3">
-          <button onClick={() => downloadFile({ productos, ventas, configuracion: config }, `axia_backup_total_${new Date().toISOString().split('T')[0]}.json`)}
+          <button onClick={() => downloadFile({ productos, ventas, configuracion: config }, `axia_backup_total_${todayYMD()}.json`)}
             className="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors">
             <Download className="w-4 h-4" /> Descargar Respaldo Total
           </button>

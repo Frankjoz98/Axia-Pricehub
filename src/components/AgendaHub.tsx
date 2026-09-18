@@ -17,11 +17,11 @@ import VencimientosTab from './agenda/VencimientosTab';
 
 export default function AgendaHub() {
   const { proveedores, facturas, ventas, inventario } = useAppContext();
-  
+
   const { eventos, isLoading: loadingEvents, addEvento, updateEvento, deleteEvento } = useAgenda();
   const { addEntrada, entradas, deleteEntrada } = useBitacora();
   const { metas } = useMetas();
-  
+
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<AgendaEvento | null>(null);
@@ -64,9 +64,9 @@ export default function AgendaHub() {
     const dbEvents = eventos.filter(e => e.fecha === selectedDateStr);
     const suggestions = generateSuggestedEvents(proveedores, facturas, ventas, inventario, selectedDateStr);
     const combined = [...dbEvents, ...suggestions];
-    
+
     const priorityWeight: Record<string, number> = { urgente: 4, alta: 3, media: 2, baja: 1 };
-    
+
     return combined.sort((a, b) => {
       if (a.completado !== b.completado) return a.completado ? 1 : -1;
       return priorityWeight[b.prioridad] - priorityWeight[a.prioridad];
@@ -76,7 +76,7 @@ export default function AgendaHub() {
   const datesWithEvents = useMemo(() => {
     const dates = new Set<string>();
     eventos.forEach(e => dates.add(e.fecha));
-    
+
     // Check suggestions for the next 30 days so they show on the mini calendar
     for (let i = 0; i < 30; i++) {
       const d = new Date();
@@ -120,12 +120,12 @@ export default function AgendaHub() {
   return (
     // Contenedor edge-to-edge estricto para evitar scroll de ventana
     <div className="relative flex w-full h-[calc(100vh-10.5rem)] animate-in fade-in duration-500 overflow-hidden bg-slate-50">
-      
+
       {/* Drawer Overlay (clic para cerrar) */}
       {isSidebarOpen && (
-        <div 
-          className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm z-30" 
-          onClick={() => setIsSidebarOpen(false)} 
+        <div
+          className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm z-30"
+          onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
@@ -136,14 +136,14 @@ export default function AgendaHub() {
       )}>
         <div className="flex items-center justify-between mb-8 mt-2 px-2">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Centro Operativo</h3>
-          <button 
-            onClick={() => setIsSidebarOpen(false)} 
+          <button
+            onClick={() => setIsSidebarOpen(false)}
             className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
-        
+
         <nav className="flex flex-col gap-2">
           {NavTabs.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -151,13 +151,13 @@ export default function AgendaHub() {
               <button
                 key={tab.id}
                 onClick={() => {
-                  setActiveTab(tab.id as any);
+                  setActiveTab(tab.id);
                   setIsSidebarOpen(false); // Ocultar al seleccionar
                 }}
                 className={cn(
                   "flex items-center gap-3 px-4 py-4 rounded-2xl text-sm font-bold transition-all text-left group",
-                  isActive 
-                    ? "bg-violet-600 text-white shadow-md shadow-violet-600/20" 
+                  isActive
+                    ? "bg-violet-600 text-white shadow-md shadow-violet-600/20"
                     : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                 )}
               >
@@ -171,11 +171,11 @@ export default function AgendaHub() {
 
       {/* Main Content Area */}
       <div className="flex-1 w-full flex flex-col h-full overflow-hidden">
-        
+
         {/* Universal Top Bar for the Module */}
         <div className="flex items-center justify-between p-4 bg-white border-b border-slate-200 shrink-0 z-10">
            <div className="flex items-center gap-4">
-             <button 
+             <button
                onClick={() => setIsSidebarOpen(true)}
                className="p-2.5 bg-white border border-slate-200 shadow-sm hover:bg-slate-50 rounded-xl text-slate-700 transition-colors active:scale-95"
                title="Abrir Menú (Centro Operativo)"
@@ -189,7 +189,7 @@ export default function AgendaHub() {
 
            {/* Call to Actions if needed per tab */}
            {activeTab === 'eventos' && (
-             <button 
+             <button
                onClick={() => { setEditingEvent(null); setIsModalOpen(true); }}
                className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 shadow-md transition-all active:scale-95"
              >
@@ -201,17 +201,17 @@ export default function AgendaHub() {
 
         {/* Scrollable Tab Content */}
         <div className="flex-1 flex flex-col overflow-y-auto no-scrollbar relative">
-          
+
           {activeTab === 'eventos' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full w-full bg-slate-50 p-6">
-              
+
               {/* Left Column: Timeline (70%) */}
               <div className="lg:col-span-2 flex flex-col overflow-y-auto no-scrollbar">
                 <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight">
-                      {selectedDateStr === todayStr 
-                        ? 'Agenda de Hoy' 
+                      {selectedDateStr === todayStr
+                        ? 'Agenda de Hoy'
                         : `Agenda: ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-NI', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase())}`}
                     </h2>
                     <p className="text-slate-500 font-medium text-sm mt-1">
@@ -225,8 +225,8 @@ export default function AgendaHub() {
                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900" />
                   </div>
                 ) : (
-                  <EventList 
-                    eventos={allEventsForSelectedDate} 
+                  <EventList
+                    eventos={allEventsForSelectedDate}
                     onToggleComplete={handleToggleComplete}
                     onEdit={(e) => { setEditingEvent(e); setIsModalOpen(true); }}
                     onDelete={handleDelete}
@@ -236,13 +236,13 @@ export default function AgendaHub() {
 
               {/* Right Column: Sidebar (30%) */}
               <div className="lg:col-span-1 flex flex-col gap-6 overflow-y-auto no-scrollbar">
-                
+
                 {/* Mini Calendar */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-                  <MiniCalendar 
-                    selectedDate={selectedDate} 
-                    onSelectDate={setSelectedDate} 
-                    eventDates={datesWithEvents} 
+                  <MiniCalendar
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                    eventDates={datesWithEvents}
                   />
                 </div>
 
@@ -257,16 +257,16 @@ export default function AgendaHub() {
                         <h3 className="text-[10px] font-black uppercase tracking-wider text-purple-600 mb-1">Foco Semanal</h3>
                         <p className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2">{mainMeta.titulo}</p>
                       </div>
-                      
+
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-[10px] font-bold">
                           <span className="text-purple-600/70">Progreso</span>
                           <span className="text-purple-700">{mainMetaProgress}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-purple-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-purple-600 rounded-full transition-all duration-500 ease-out" 
-                            style={{ width: `${mainMetaProgress}%` }} 
+                          <div
+                            className="h-full bg-purple-600 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${mainMetaProgress}%` }}
                           />
                         </div>
                       </div>
@@ -310,7 +310,7 @@ export default function AgendaHub() {
                               </span>
                               <span className="truncate">{nota.titulo}</span>
                             </div>
-                            <button 
+                            <button
                               onClick={() => { if(confirm('¿Descartar esta nota rápida?')) deleteEntrada(nota.id); }}
                               className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 transition-all"
                               title="Descartar"
@@ -323,7 +323,7 @@ export default function AgendaHub() {
                     </div>
                   )}
                 </div>
-                
+
               </div>
             </div>
           )}
@@ -334,7 +334,7 @@ export default function AgendaHub() {
         </div>
       </div>
 
-      <EventFormModal 
+      <EventFormModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingEvent(null); }}
         onSave={handleSaveEvent}

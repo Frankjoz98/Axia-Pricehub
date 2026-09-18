@@ -3,6 +3,12 @@ import type { OdooInventario, VentaHistorica } from '../types';
 import { Ghost, PackageX, Search, TrendingDown, AlertOctagon, Star } from 'lucide-react';
 import { supabase } from '../supabase';
 import { cn } from '../lib/utils';
+import { buildInventarioIndex } from '../lib/odoo';
+import { useAppContext } from '../context/AppContext';
+
+interface InventarioConVentas extends OdooInventario {
+  salesCount: number;
+}
 
 interface DeadStockProps {
   inventario?: OdooInventario[];
@@ -10,39 +16,23 @@ interface DeadStockProps {
 }
 
 export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
+  const { updateInventarioItem } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
 
   const processedInventory = useMemo(() => {
     if (!inventario || inventario.length === 0) return [];
-    
-    const nameSales = new Map<string, number>();
-    const refSales = new Map<string, number>();
-    
+
+    // Cruce por odoo_id (con fallback por nombre) — mismo índice que el resto de módulos (RF-7)
+    const invIndex = buildInventarioIndex(inventario);
+    const unidadesVendidas = new Map<string, number>();
     ventas.forEach(v => {
-      if (!v.product_name) return;
-      const lowerProduct = v.product_name.toLowerCase().trim();
-      nameSales.set(lowerProduct, (nameSales.get(lowerProduct) || 0) + 1);
-      
-      if (lowerProduct.startsWith('[')) {
-        const endIdx = lowerProduct.indexOf(']');
-        if (endIdx > 1) {
-          const ref = lowerProduct.substring(1, endIdx).trim();
-          refSales.set(ref, (refSales.get(ref) || 0) + 1);
-        }
-      }
+      const inv = invIndex.find(v);
+      if (inv) unidadesVendidas.set(inv.id, (unidadesVendidas.get(inv.id) || 0) + v.quantity);
     });
 
-    const results = inventario.filter(item => item.stock > 0).map(item => {
-       const nameMatch = item.product_name.toLowerCase().trim();
-       const refMatch = item.referencia ? item.referencia.toLowerCase().trim() : '';
-       
-       let salesCount = nameSales.get(nameMatch) || 0;
-       if (salesCount === 0 && refMatch) {
-         salesCount = refSales.get(refMatch) || 0;
-       }
-       
-       return { ...item, salesCount };
-    });
+    const results: InventarioConVentas[] = inventario
+      .filter(item => item.stock > 0)
+      .map(item => ({ ...item, salesCount: unidadesVendidas.get(item.id) || 0 }));
 
     return results.sort((a, b) => {
       if (a.impulso_medico && !b.impulso_medico) return -1;
@@ -51,8 +41,8 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
     });
   }, [inventario, ventas]);
 
-  const filtered = processedInventory.filter(item => 
-    item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filtered = processedInventory.filter(item =>
+    item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.referencia && item.referencia.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -61,11 +51,14 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
     if (!item.id) return;
     setToggling(item.id);
     const newValue = !item.impulso_medico;
-    
-    // Optimistic update mutating the prop (React might not re-render immediately if we don't update state, but this is a simple local mutation just for visual feedback until next fetch)
-    item.impulso_medico = newValue;
-    
-    await supabase.from('inventario_local').update({ impulso_medico: newValue }).eq('id', item.id);
+
+    // Optimista sobre el estado global (sin mutar props); se revierte si Supabase falla
+    updateInventarioItem(item.id, { impulso_medico: newValue });
+    const { error } = await supabase.from('inventario_local').update({ impulso_medico: newValue }).eq('id', item.id);
+    if (error) {
+      updateInventarioItem(item.id, { impulso_medico: !newValue });
+      alert('No se pudo actualizar Impulso Médico: ' + error.message);
+    }
     setToggling(null);
   };
 
@@ -90,9 +83,9 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div className="relative w-72">
             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar producto estancado..." 
+            <input
+              type="text"
+              placeholder="Buscar producto estancado..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
@@ -128,19 +121,19 @@ export default function DeadStock({ inventario = [], ventas }: DeadStockProps) {
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      {(item as any).salesCount > 0 ? (
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-100">{(item as any).salesCount} ventas</span>
+                      {item.salesCount > 0 ? (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-100">{item.salesCount} u. vendidas</span>
                       ) : (
                         <span className="text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">Sin ventas</span>
                       )}
                     </td>
                     <td className="p-4 text-center">
-                      <button 
+                      <button
                         onClick={() => handleToggleImpulso(item)}
                         disabled={toggling === item.id}
-                        className={cn("p-2 rounded-full transition-colors", 
-                          item.impulso_medico 
-                            ? "text-amber-500 bg-amber-50 hover:bg-amber-100" 
+                        className={cn("p-2 rounded-full transition-colors",
+                          item.impulso_medico
+                            ? "text-amber-500 bg-amber-50 hover:bg-amber-100"
                             : "text-slate-300 hover:text-amber-500 hover:bg-slate-50",
                           toggling === item.id && "opacity-50 cursor-not-allowed"
                         )}

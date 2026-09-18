@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, BarChart, Bar, Legend } from 'recharts';
 import type { VentaHistorica, OdooInventario } from '../../types';
+import { useBusinessMetrics } from '../../hooks/useBusinessMetrics';
+import { parseLocalYMD } from '../../lib/dates';
 
 interface PrintableReportProps {
   ventas: VentaHistorica[];
@@ -12,204 +14,68 @@ interface PrintableReportProps {
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function PrintableReport({ ventas, inventario = [], startDate, endDate }: PrintableReportProps) {
+  // Mismo motor que el IntelligenceHub (sesiones, turnos y día operativo): el reporte impreso
+  // nunca puede discrepar de la pantalla.
+  const dateRange = useMemo(() => ({ start: parseLocalYMD(startDate), end: parseLocalYMD(endDate) }), [startDate, endDate]);
+  const base = useBusinessMetrics({ ventas, inventario, timeGrouping: 'daily', dateRange });
+
   const metrics = useMemo(() => {
-    const start = new Date(startDate);
-    start.setHours(0,0,0,0);
-    const end = new Date(endDate);
-    end.setHours(23,59,59,999);
+    const topStaff: [string, number][] = base.staffData.slice(0, 5).map(s => [s.name, s.revenue]);
+    const topHours: [string, number][] = [...base.hourlyData].sort((a, b) => b.revenue - a.revenue).slice(0, 5).map(h => [h.hour, h.revenue]);
 
-    const filteredVentas = ventas.filter(v => {
-      const d = new Date(v.date);
-      return d >= start && d <= end;
-    });
-
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalPosRevenue = 0;
-    let totalBackendRevenue = 0;
-    const uniqueTickets = new Set();
-    
-    const revenueByHour: Record<string, number> = {};
-    const revenueByDay: Record<string, { revenue: number, turno1: number, turno2: number, turno3: number }> = {};
-    const revenueByStaff: Record<string, number> = {};
-    const brandStats: Record<string, { revenue: number, cost: number, qty: number }> = {};
-    const productStats: Record<string, { revenue: number, margin: number, qty: number }> = {};
-
-    // PASO 1: Mapeo de Sesiones (Regla de Oro con Midpoint)
-    const sessionMeta: Record<string, { minDate: Date; maxDate: Date; turno: 'turno1' | 'turno2' | 'turno3'; businessDate: Date }> = {};
-    filteredVentas.forEach(v => {
-      if (v.sesion) {
-        const d = new Date(v.date);
-        if (!sessionMeta[v.sesion]) {
-          sessionMeta[v.sesion] = { minDate: d, maxDate: d, turno: 'turno1', businessDate: d }; 
-        } else {
-          if (d < sessionMeta[v.sesion].minDate) sessionMeta[v.sesion].minDate = d;
-          if (d > sessionMeta[v.sesion].maxDate) sessionMeta[v.sesion].maxDate = d;
-        }
-      }
-    });
-
-    Object.keys(sessionMeta).forEach(sesion => {
-      const meta = sessionMeta[sesion];
-      const midpointTime = meta.minDate.getTime() + (meta.maxDate.getTime() - meta.minDate.getTime()) / 2;
-      const midpointDate = new Date(midpointTime);
-      const hour = midpointDate.getHours();
-      
-      if (hour >= 6 && hour < 14) meta.turno = 'turno1'; 
-      else if (hour >= 14 && hour < 22) meta.turno = 'turno2'; 
-      else meta.turno = 'turno3'; 
-
-      const bd = new Date(midpointDate.getTime());
-      if (meta.turno === 'turno3' && hour < 12) bd.setDate(bd.getDate() - 1);
-      meta.businessDate = bd;
-    });
-
-    filteredVentas.forEach(v => {
-      const revenue = v.quantity * v.unit_price;
-      const cost = v.total_cost || 0;
-      const margin = revenue - cost;
-      
-      totalRevenue += revenue;
-      totalCost += cost;
-      if (v.order_ref) {
-        const ticketKey = v.sesion ? `${v.sesion}_${v.order_ref}` : v.order_ref;
-        uniqueTickets.add(ticketKey);
-      }
-      
-      if (v.sesion) {
-        totalPosRevenue += revenue;
-      } else {
-        totalBackendRevenue += revenue;
-      }
-      
-      const dateObj = new Date(v.date);
-      const hour = dateObj.getHours().toString().padStart(2, '0') + ':00';
-      const staff = v.cajero || v.vendedor || 'Desconocido';
-      const brand = v.marca || 'Sin Marca';
-      const prodName = v.product_name || 'Desconocido';
-
-      const sessionInfo = v.sesion ? sessionMeta[v.sesion] : null;
-      let businessDate: Date;
-      let saleTurno: 'turno1' | 'turno2' | 'turno3';
-
-      if (sessionInfo) {
-        businessDate = sessionInfo.businessDate;
-        saleTurno = sessionInfo.turno;
-      } else {
-        businessDate = new Date(dateObj.getTime());
-        const rawHour = dateObj.getHours();
-        
-        if (rawHour >= 4 && rawHour < 12) saleTurno = 'turno1';
-        else if (rawHour >= 12 && rawHour < 20) saleTurno = 'turno2';
-        else saleTurno = 'turno3';
-        
-        if (saleTurno === 'turno3' && rawHour < 12) businessDate.setDate(businessDate.getDate() - 1);
-      }
-
-      const day = businessDate.toISOString().split('T')[0];
-      
-      revenueByHour[hour] = (revenueByHour[hour] || 0) + revenue;
-      if (!revenueByDay[day]) revenueByDay[day] = { revenue: 0, turno1: 0, turno2: 0, turno3: 0 };
-      revenueByDay[day].revenue += revenue;
-      revenueByDay[day][saleTurno] += revenue;
-      
-      revenueByStaff[staff] = (revenueByStaff[staff] || 0) + revenue;
-      
-      if (!brandStats[brand]) brandStats[brand] = { revenue: 0, cost: 0, qty: 0 };
-      brandStats[brand].revenue += revenue;
-      brandStats[brand].cost += cost;
-      brandStats[brand].qty += v.quantity;
-
-      if (!productStats[prodName]) productStats[prodName] = { revenue: 0, margin: 0, qty: 0 };
-      productStats[prodName].revenue += revenue;
-      productStats[prodName].margin += margin;
-      productStats[prodName].qty += v.quantity;
-    });
-
-    const totalMargin = totalRevenue - totalCost;
-    const marginPercent = totalRevenue > 0 ? (totalMargin / totalRevenue) * 100 : 0;
-    const avgTicket = uniqueTickets.size > 0 ? totalRevenue / uniqueTickets.size : 0;
-    
-    const globalCatalogMarginPercent = (() => {
-      let sumOfMarginPercents = 0;
-      let count = 0;
-      if (inventario) {
-        inventario.forEach(inv => {
-          if (inv.precio > 0) {
-            const m = ((inv.precio - inv.costo) / inv.precio) * 100;
-            sumOfMarginPercents += m;
-            count++;
-          }
-        });
-      }
-      return count > 0 ? sumOfMarginPercents / count : 0;
-    })();
-
-    const topStaff = Object.entries(revenueByStaff).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topHours = Object.entries(revenueByHour).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    
-    const dailyData = Object.entries(revenueByDay).sort((a, b) => a[0].localeCompare(b[0])).map(([date, data]) => ({
-      date: date.substring(5), // MM-DD
-      revenue: data.revenue,
-      turno1: data.turno1,
-      turno2: data.turno2,
-      turno3: data.turno3
+    // timeStats completo (trendData recorta a 30 puntos y un reporte puede abarcar más)
+    const dailyData = Object.values(base.timeStats).sort((a, b) => a.time.localeCompare(b.time)).map(d => ({
+      date: d.time.substring(5), // MM-DD
+      revenue: d.revenue,
+      turno1: d.turno1,
+      turno2: d.turno2,
+      turno3: d.turno3
     }));
 
-    const brandCatalogStats: Record<string, { sum: number, count: number }> = {};
-    if (inventario) {
-      inventario.forEach(inv => {
-        const b = inv.marca || 'Sin Especificar';
-        if (inv.precio > 0) {
-          if (!brandCatalogStats[b]) brandCatalogStats[b] = { sum: 0, count: 0 };
-          brandCatalogStats[b].sum += ((inv.precio - inv.costo) / inv.precio) * 100;
-          brandCatalogStats[b].count += 1;
-        }
-      });
-    }
-
-    const brandData = Object.entries(brandStats)
-      .sort((a, b) => b[1].revenue - a[1].revenue)
-      .map(([name, stats]) => {
-        const catStats = brandCatalogStats[name];
-        const catalogMarginPercent = catStats && catStats.count > 0 ? (catStats.sum / catStats.count) : null;
+    const brandData = [...base.allBrandsData]
+      .sort((a, b) => b.revenue - a.revenue)
+      .map(b => {
+        const catStat = base.brandCatalogStats[b.fullName];
         return {
-          name,
-          value: stats.revenue,
-          margin: stats.revenue - stats.cost,
-          marginPercent: stats.revenue > 0 ? ((stats.revenue - stats.cost) / stats.revenue) * 100 : 0,
-          catalogMarginPercent,
-          qty: stats.qty
+          name: b.fullName,
+          value: b.revenue,
+          margin: b.margin,
+          marginPercent: b.marginPercent,
+          catalogMarginPercent: catStat && catStat.totalProducts > 0 ? b.catalogMarginPercent : null,
+          qty: b.qty
         };
       });
-      
-    const topBrands = brandData.slice(0, 6); // For PieChart
-    const topProducts = Object.entries(productStats)
-      .sort((a, b) => b[1].revenue - a[1].revenue)
-      .slice(0, 5);
 
-    const bestDay = dailyData.reduce((max, d) => d.revenue > max.revenue ? d : max, {date: '', revenue: 0});
-    const bestBrand = brandData.length > 0 ? brandData[0] : {name: 'N/A', value: 0, marginPercent: 0};
-    
-    const mostProfitableBrand = brandData.length > 0 
-      ? brandData.reduce((max, b) => b.marginPercent > max.marginPercent && b.value > 1000 ? b : max, brandData[0]) 
-      : {name: 'N/A', marginPercent: 0};
+    const topBrands = brandData.slice(0, 6);
+    const topProducts: [string, { revenue: number; margin: number; qty: number }][] = [...base.allProductsData]
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5)
+      .map(p => [p.fullName, { revenue: p.revenue, margin: p.margin, qty: p.qty }]);
 
-    const bestStaff = topStaff.length > 0 ? topStaff[0] : ['N/A', 0];
-    const bestHour = topHours.length > 0 ? topHours[0] : ['N/A', 0];
+    const bestDay = dailyData.reduce((max, d) => d.revenue > max.revenue ? d : max, { date: '', revenue: 0 });
+    const bestBrand = brandData.length > 0 ? brandData[0] : { name: 'N/A', value: 0, marginPercent: 0 };
+    const mostProfitableBrand = brandData.length > 0
+      ? brandData.reduce((max, b) => b.marginPercent > max.marginPercent && b.value > 1000 ? b : max, brandData[0])
+      : { name: 'N/A', marginPercent: 0 };
 
     const totalT1 = dailyData.reduce((acc, d) => acc + d.turno1, 0);
     const totalT2 = dailyData.reduce((acc, d) => acc + d.turno2, 0);
     const totalT3 = dailyData.reduce((acc, d) => acc + d.turno3, 0);
 
     return {
-      totalRevenue, totalCost, totalMargin, marginPercent, avgTicket, totalTickets: uniqueTickets.size,
-      totalPosRevenue, totalBackendRevenue,
-      topStaff, topHours, dailyData, brandData, topBrands, topProducts, bestDay, bestBrand, mostProfitableBrand, bestStaff, bestHour,
-      totalT1, totalT2, totalT3,
-      globalCatalogMarginPercent
+      totalRevenue: base.totalRevenue,
+      totalCost: base.totalCost,
+      totalMargin: base.totalMargin,
+      marginPercent: base.marginPercent,
+      avgTicket: base.ticketAvg,
+      totalTickets: base.totalTransactions,
+      totalPosRevenue: base.posRevenue,
+      totalBackendRevenue: base.backendRevenue,
+      globalCatalogMarginPercent: base.globalCatalogMarginPercent,
+      topStaff, topHours, dailyData, brandData, topBrands, topProducts, bestDay, bestBrand, mostProfitableBrand,
+      totalT1, totalT2, totalT3
     };
-  }, [ventas, inventario, startDate, endDate]);
+  }, [base]);
 
   const formatter = new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { errorMessage } from '../lib/utils';
 import type { BitacoraEntry } from '../types';
 
 export function useBitacora() {
@@ -22,8 +23,8 @@ export function useBitacora() {
 
       if (error) throw error;
       setEntradas(data || []);
-    } catch (error: any) {
-      console.error('Error fetching bitácora:', error.message);
+    } catch (error) {
+      console.error('Error fetching bitácora:', errorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -42,8 +43,8 @@ export function useBitacora() {
 
       if (error) throw error;
       setEntradas(prev => [data, ...prev]);
-    } catch (error: any) {
-      console.error('Error adding bitácora:', error.message);
+    } catch (error) {
+      console.error('Error adding bitácora:', errorMessage(error));
       throw error;
     }
   };
@@ -59,8 +60,8 @@ export function useBitacora() {
 
       if (error) throw error;
       setEntradas(prev => prev.map(e => e.id === id ? data : e));
-    } catch (error: any) {
-      console.error('Error updating bitácora:', error.message);
+    } catch (error) {
+      console.error('Error updating bitácora:', errorMessage(error));
       throw error;
     }
   };
@@ -70,8 +71,8 @@ export function useBitacora() {
       const { error } = await supabase.from('bitacora_avances').delete().eq('id', id);
       if (error) throw error;
       setEntradas(prev => prev.filter(e => e.id !== id));
-    } catch (error: any) {
-      console.error('Error deleting bitácora:', error.message);
+    } catch (error) {
+      console.error('Error deleting bitácora:', errorMessage(error));
       throw error;
     }
   };

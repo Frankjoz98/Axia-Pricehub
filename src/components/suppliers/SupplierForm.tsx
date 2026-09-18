@@ -3,6 +3,7 @@ import { X, Save, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { api } from '../../services/api';
 import type { Proveedor, TipoPrecio } from '../../types';
+import { errorMessage } from '../../lib/utils';
 
 interface SupplierFormProps {
   proveedor?: Proveedor;
@@ -31,7 +32,7 @@ export function SupplierForm({ proveedor, onClose }: SupplierFormProps) {
     activo: proveedor ? proveedor.activo : true
   });
 
-  const handleChange = (field: keyof Proveedor, value: any) => {
+  const handleChange = <K extends keyof Proveedor>(field: K, value: Proveedor[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -41,7 +42,7 @@ export function SupplierForm({ proveedor, onClose }: SupplierFormProps) {
       setError('El nombre del proveedor es obligatorio');
       return;
     }
-    
+
     setIsSaving(true);
     setError(null);
 
@@ -53,8 +54,8 @@ export function SupplierForm({ proveedor, onClose }: SupplierFormProps) {
       }
       await refreshData();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Error al guardar el proveedor');
+    } catch (err) {
+      setError(errorMessage(err) || 'Error al guardar el proveedor');
     } finally {
       setIsSaving(false);
     }
@@ -138,7 +139,7 @@ export function SupplierForm({ proveedor, onClose }: SupplierFormProps) {
                     <option value="mixto">Mixto</option>
                   </select>
                 </div>
-                
+
                 {formData.tipo_precio === 'descuento' && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Porcentaje de Descuento (%)</label>
@@ -152,7 +153,7 @@ export function SupplierForm({ proveedor, onClose }: SupplierFormProps) {
                   <input type="checkbox" id="tiene_bonificacion" checked={formData.tiene_bonificacion} onChange={e => handleChange('tiene_bonificacion', e.target.checked)} className="w-5 h-5 rounded text-violet-600 focus:ring-violet-500 border-slate-300" />
                   <label htmlFor="tiene_bonificacion" className="text-sm font-medium text-slate-700">Ofrece Bonificaciones</label>
                 </div>
-                
+
                 {formData.tiene_bonificacion && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Detalle de Bonificación</label>

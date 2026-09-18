@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Search, User, Stethoscope, AlertTriangle } from 'lucide-react';
+import { X, Search, User, Stethoscope, AlertTriangle, type LucideIcon } from 'lucide-react';
 import type { TipoPedido } from '../../types';
 import { cn } from '../../lib/utils';
 
@@ -16,7 +16,7 @@ interface PedidoFormProps {
   }) => Promise<void>;
 }
 
-const TIPOS: { id: TipoPedido, label: string, icon: any, color: string }[] = [
+const TIPOS: { id: TipoPedido, label: string, icon: LucideIcon, color: string }[] = [
   { id: 'sugerencia', label: 'Sugerencia', icon: Search, color: 'text-violet-600 bg-violet-100 border-violet-200 hover:bg-violet-50' },
   { id: 'encargo_cliente', label: 'Encargo', icon: User, color: 'text-blue-600 bg-blue-100 border-blue-200 hover:bg-blue-50' },
   { id: 'esencial', label: 'Esencial', icon: Stethoscope, color: 'text-emerald-600 bg-emerald-100 border-emerald-200 hover:bg-emerald-50' },
@@ -37,7 +37,7 @@ export default function PedidoForm({ onClose, onSave }: PedidoFormProps) {
     e.preventDefault();
     setIsSubmitting(true);
     localStorage.setItem('axia_ultimo_dependiente', dependiente);
-    
+
     try {
       await onSave({
         producto_nombre: producto,
@@ -60,7 +60,7 @@ export default function PedidoForm({ onClose, onSave }: PedidoFormProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        
+
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-slate-50">
           <h2 className="text-xl font-black text-slate-800">Nuevo Requerimiento</h2>
@@ -72,7 +72,7 @@ export default function PedidoForm({ onClose, onSave }: PedidoFormProps) {
         {/* Form Body */}
         <div className="flex-1 overflow-y-auto p-6">
           <form id="pedido-form" onSubmit={handleSubmit} className="space-y-6">
-            
+
             {/* Tipo de Pedido */}
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Categoría del Pedido</label>

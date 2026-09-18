@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { X, Calendar, Clock, User } from 'lucide-react';
 import type { CitaMedica } from '../../types';
+import { todayYMD } from '../../lib/dates';
 
 interface CitaFormProps {
   onClose: () => void;
-  onSave: (cita: Omit<CitaMedica, 'id' | 'created_at' | 'estado'>) => Promise<any>;
+  onSave: (cita: Omit<CitaMedica, 'id' | 'created_at' | 'estado'>) => Promise<unknown>;
 }
 
 export default function CitaForm({ onClose, onSave }: CitaFormProps) {
   const [paciente, setPaciente] = useState('');
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState(todayYMD());
   const [hora, setHora] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -42,13 +43,13 @@ export default function CitaForm({ onClose, onSave }: CitaFormProps) {
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-        
+
         <div className="bg-blue-600 p-6 text-white flex items-center justify-between">
           <div>
             <h2 className="text-xl font-black">Agendar Cita Médica</h2>
             <p className="text-blue-100 text-sm font-medium mt-1">Ingresa los datos del paciente</p>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 hover:bg-blue-500 rounded-full transition-colors"
           >
@@ -57,7 +58,7 @@ export default function CitaForm({ onClose, onSave }: CitaFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
-          
+
           {error && (
             <div className="mb-4 p-3 bg-rose-50 text-rose-600 text-sm font-bold rounded-xl border border-rose-100">
               {error}
@@ -65,7 +66,7 @@ export default function CitaForm({ onClose, onSave }: CitaFormProps) {
           )}
 
           <div className="space-y-4">
-            
+
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1.5">Nombre del Paciente</label>
               <div className="relative">
@@ -94,7 +95,7 @@ export default function CitaForm({ onClose, onSave }: CitaFormProps) {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1.5">Hora</label>
                 <div className="relative">

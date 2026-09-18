@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils';
 import { api } from '../../services/api';
 import { useAppContext } from '../../context/AppContext';
 import type { FacturaCompra } from '../../types';
+import { isFacturaVencida } from '../../lib/facturas';
 
 interface InvoiceTimelineProps {
   facturas: FacturaCompra[];
@@ -15,8 +16,8 @@ export function InvoiceTimeline({ facturas }: InvoiceTimelineProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const getStatusConfig = (factura: FacturaCompra) => {
-    const isVencida = factura.estado === 'vencida' || (factura.estado === 'pendiente' && factura.fecha_vencimiento && new Date(factura.fecha_vencimiento) < new Date());
-    
+    const isVencida = isFacturaVencida(factura);
+
     if (isVencida) return { icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-50', border: 'border-rose-200', label: 'Vencida' };
     if (factura.estado === 'pagada') return { icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Pagada' };
     return { icon: Calendar, color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', label: 'Pendiente' };
@@ -71,7 +72,7 @@ export function InvoiceTimeline({ facturas }: InvoiceTimelineProps) {
           const hasImages = factura.imagenes && factura.imagenes.length > 0;
 
           return (
-            <div 
+            <div
               key={factura.id}
               onClick={() => setSelectedInvoice(factura)}
               className={cn(
@@ -112,9 +113,9 @@ export function InvoiceTimeline({ facturas }: InvoiceTimelineProps) {
 
       {/* Invoice Gallery Modal */}
       {selectedInvoice && (
-        <InvoiceGalleryModal 
-          factura={selectedInvoice} 
-          onClose={() => setSelectedInvoice(null)} 
+        <InvoiceGalleryModal
+          factura={selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
           onToggleEstado={() => handleToggleEstado(selectedInvoice)}
           onDelete={() => handleDelete(selectedInvoice.id)}
           isDeleting={isDeleting}
@@ -143,17 +144,17 @@ function InvoiceGalleryModal({ factura, onClose, onToggleEstado, onDelete, isDel
   return (
     <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-3xl overflow-hidden w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row">
-        
+
         {/* Gallery Section */}
         <div className="flex-1 bg-slate-900 relative flex items-center justify-center min-h-75">
           {hasImages ? (
             <>
-              <img 
-                src={images[currentImageIndex]} 
-                alt={`Página ${currentImageIndex + 1}`} 
+              <img
+                src={images[currentImageIndex]}
+                alt={`Página ${currentImageIndex + 1}`}
                 className="max-w-full max-h-[80vh] object-contain"
               />
-              
+
               {/* Image Controls */}
               {images.length > 1 && (
                 <>
@@ -185,7 +186,7 @@ function InvoiceGalleryModal({ factura, onClose, onToggleEstado, onDelete, isDel
               <X className="w-5 h-5" />
             </button>
           </div>
-          
+
           <div className="p-6 space-y-6 flex-1 overflow-y-auto">
             <div>
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Número</span>
@@ -219,7 +220,7 @@ function InvoiceGalleryModal({ factura, onClose, onToggleEstado, onDelete, isDel
           </div>
 
           <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-3">
-            <button 
+            <button
               onClick={onToggleEstado}
               className={cn(
                 "w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors",
@@ -229,7 +230,7 @@ function InvoiceGalleryModal({ factura, onClose, onToggleEstado, onDelete, isDel
               <CheckCircle2 className="w-5 h-5" />
               {factura.estado === 'pagada' ? 'Marcar como Pendiente' : 'Marcar como Pagada'}
             </button>
-            <button 
+            <button
               onClick={onDelete}
               disabled={isDeleting}
               className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors disabled:opacity-50"

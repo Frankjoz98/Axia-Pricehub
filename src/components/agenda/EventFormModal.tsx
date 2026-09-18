@@ -101,7 +101,7 @@ export default function EventFormModal({ isOpen, onClose, onSave, initialData, s
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tipo</label>
               <select
                 value={tipo}
-                onChange={e => setTipo(e.target.value as any)}
+                onChange={e => setTipo(e.target.value as AgendaEvento['tipo'])}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-medium text-slate-700 appearance-none"
               >
                 <option value="tarea">Tarea</option>
@@ -114,7 +114,7 @@ export default function EventFormModal({ isOpen, onClose, onSave, initialData, s
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Prioridad</label>
               <select
                 value={prioridad}
-                onChange={e => setPrioridad(e.target.value as any)}
+                onChange={e => setPrioridad(e.target.value as AgendaEvento['prioridad'])}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-medium text-slate-700 appearance-none"
               >
                 <option value="baja">Baja</option>

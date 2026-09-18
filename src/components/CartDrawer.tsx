@@ -3,8 +3,9 @@ import { ShoppingCart, X, Plus, Minus, Gift, Phone, FileSpreadsheet, Package, Tr
 import { cn, exportCartToCSV, generateWhatsAppMessage } from '../lib/utils';
 import { generatePurchaseOrderPDF } from '../lib/pdf';
 import { auditOrder, type OrderAuditResult } from '../lib/ai';
-import type { CartItem, PurchaseOrderItem } from '../types';
+import type { CartItem, PurchaseOrderItem, PurchaseOrder } from '../types';
 import { supabase } from '../supabase';
+import { useAppContext } from '../context/AppContext';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface CartDrawerProps {
 
 export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clearProviderCart }: CartDrawerProps) {
   const [auditState, setAuditState] = useState<{ provider: string; result: OrderAuditResult | null; loading: boolean } | null>(null);
+  const { ordenes, setOrdenes } = useAppContext();
 
   const total = cart.reduce((a, c) => a + (c.quantity * c.selectedOffer.netPrice), 0);
 
@@ -29,7 +31,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
 
   const handleSendOrder = async (provider: string, type: 'whatsapp' | 'csv' | 'pdf') => {
     const itemsForProvider = groupedCart[provider].map(g => g.item);
-    
+
     // 1. Export, WhatsApp, or PDF
     if (type === 'whatsapp') {
       const msg = generateWhatsAppMessage(itemsForProvider);
@@ -52,16 +54,18 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
 
     const totalProvider = itemsForProvider.reduce((a, c) => a + (c.quantity * c.selectedOffer.netPrice), 0);
 
-    const { error } = await supabase.from('ordenes_compra').insert({
+    const { data: nuevaOrden, error } = await supabase.from('ordenes_compra').insert({
       provider,
       status: 'Pendiente',
       items: poItems,
       total: totalProvider
-    });
+    }).select().single();
 
     if (error) {
       alert('Error guardando la orden en el historial: ' + error.message);
     } else {
+      // El historial de órdenes se actualiza sin recargar
+      if (nuevaOrden) setOrdenes([nuevaOrden as PurchaseOrder, ...ordenes]);
       // 3. Clear from cart
       clearProviderCart(provider);
       alert(`✅ Pedido de ${provider} generado y guardado en el historial de Órdenes.`);
@@ -73,7 +77,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
 
   const handleAudit = async (provider: string, itemsList: { item: CartItem, originalIndex: number }[]) => {
     setAuditState({ provider, result: null, loading: true });
-    
+
     const mappedItems = itemsList.map(i => ({
       productName: i.item.product.name,
       activeIngredient: i.item.product.activeIngredient,
@@ -109,7 +113,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
             <div className="space-y-6">
               {Object.entries(groupedCart).map(([provider, itemsList]) => {
                 const providerTotal = itemsList.reduce((a, { item: c }) => a + (c.quantity * c.selectedOffer.netPrice), 0);
-                
+
                 return (
                   <div key={provider} className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     {/* Provider Header */}
@@ -127,7 +131,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
                         </button>
                       </div>
                     </div>
-                    
+
                     {/* Provider Items */}
                     <div className="p-3 space-y-3 bg-white">
                       {itemsList.map(({ item, originalIndex }) => {
@@ -206,7 +210,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="p-6 max-h-[80vh] overflow-y-auto">
               <div className="mb-4">
                 <h2 className="text-xl font-black text-slate-900 leading-tight">Análisis para {auditState.provider}</h2>
@@ -225,7 +229,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Veredicto del Auditor</h4>
                     <p className="text-sm text-slate-700 font-medium leading-relaxed">{auditState.result.analysis}</p>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
                       <h4 className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">
@@ -266,7 +270,7 @@ export default function CartDrawer({ isOpen, onClose, cart, updateQuantity, clea
                 </div>
               )}
             </div>
-            
+
             {!auditState.loading && (
               <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
                 <button onClick={() => setAuditState(null)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-sm transition-all active:scale-95">

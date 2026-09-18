@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { api } from '../services/api';
+import { useBusinessMetrics } from '../hooks/useBusinessMetrics';
 import type { UnifiedProduct, VentaHistorica, OdooInventario, PurchaseOrder, AppConfig, Proveedor, FacturaCompra } from '../types';
 
 export type UserRol = 'admin' | 'caja';
@@ -19,12 +20,16 @@ interface AppContextType {
   facturas: FacturaCompra[];
   isLoadingCatalog: boolean;
   isLoadingVentas: boolean;
+  /** Valor manual de respaldo (localStorage). */
   weeklySales: number;
   setWeeklySales: (val: number) => void;
+  /** Venta semanal efectiva: promedio real de las últimas semanas con datos, o el manual si no hay ventas. */
+  weeklySalesEfectivo: number;
   setConfig: (config: AppConfig) => void;
   setOrdenes: (ordenes: PurchaseOrder[]) => void;
   setProveedores: (proveedores: Proveedor[]) => void;
   setFacturas: (facturas: FacturaCompra[]) => void;
+  updateInventarioItem: (id: string, patch: Partial<OdooInventario>) => void;
   refreshData: () => Promise<void>;
 }
 
@@ -50,10 +55,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [inventario, setInventario] = useState<OdooInventario[]>([]);
   const [ordenes, setOrdenes] = useState<PurchaseOrder[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
-  
+
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [facturas, setFacturas] = useState<FacturaCompra[]>([]);
-  
+
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [isLoadingVentas, setIsLoadingVentas] = useState(false);
   const [weeklySales, setWeeklySales] = useState<number>(() => Number(localStorage.getItem('axia_weekly_sales')) || 49000);
@@ -84,10 +89,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [userId, userEmail]);
 
+  // Actualización local inmutable de un producto de inventario (evita mutar props en los componentes)
+  const updateInventarioItem = (id: string, patch: Partial<OdooInventario>) => {
+    setInventario(prev => prev.map(item => item.id === id ? { ...item, ...patch } : item));
+  };
+
   const refreshData = async () => {
     // El rol caja solo usa la terminal de pedidos: no descarga ventas, inventario ni catálogo.
     if (!session || rol === 'caja') return;
-    
+
     setIsLoadingCatalog(true);
     setIsLoadingVentas(true);
 
@@ -129,14 +139,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('axia_weekly_sales', weeklySales.toString());
   }, [weeklySales]);
 
+  // Única fuente del presupuesto semanal para header, Dashboard y carrito
+  const { calculatedWeeklySales: weeklySalesEfectivo } = useBusinessMetrics({ ventas, weeklySales });
+
   return (
     <AppContext.Provider value={{
       session, rol, isCheckingAuth,
       productos, ventas, inventario, ordenes, config, proveedores, facturas,
       isLoadingCatalog, isLoadingVentas,
-      weeklySales, setWeeklySales, setConfig, setOrdenes,
+      weeklySales, setWeeklySales, weeklySalesEfectivo, setConfig, setOrdenes,
       setProveedores,
       setFacturas,
+      updateInventarioItem,
       refreshData
     }}>
       {children}

@@ -3,6 +3,8 @@ import { X, Save, AlertCircle, Camera, Trash2, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { api } from '../../services/api';
 import type { Proveedor } from '../../types';
+import { todayYMD, toLocalYMD } from '../../lib/dates';
+import { errorMessage } from '../../lib/utils';
 
 interface InvoiceCaptureProps {
   proveedor: Proveedor;
@@ -12,21 +14,21 @@ interface InvoiceCaptureProps {
 export function InvoiceCapture({ proveedor, onClose }: InvoiceCaptureProps) {
   const { refreshData } = useAppContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Factura state
   const [numeroFactura, setNumeroFactura] = useState('');
-  const [fechaFactura, setFechaFactura] = useState(new Date().toISOString().split('T')[0]);
-  
+  const [fechaFactura, setFechaFactura] = useState(todayYMD());
+
   // Calculate default vencimiento
   const defaultVencimiento = new Date();
   if (proveedor.dias_credito) {
     defaultVencimiento.setDate(defaultVencimiento.getDate() + proveedor.dias_credito);
   }
-  const [fechaVencimiento, setFechaVencimiento] = useState(defaultVencimiento.toISOString().split('T')[0]);
-  
+  const [fechaVencimiento, setFechaVencimiento] = useState(toLocalYMD(defaultVencimiento));
+
   const [montoTotal, setMontoTotal] = useState<number | ''>('');
   const [notas, setNotas] = useState('');
 
@@ -91,8 +93,8 @@ export function InvoiceCapture({ proveedor, onClose }: InvoiceCaptureProps) {
 
       await refreshData();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Error al guardar la factura');
+    } catch (err) {
+      setError(errorMessage(err) || 'Error al guardar la factura');
       setIsSaving(false);
     }
   };
@@ -100,7 +102,7 @@ export function InvoiceCapture({ proveedor, onClose }: InvoiceCaptureProps) {
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-8">
-        
+
         {/* Header */}
         <div className="bg-violet-600 p-6 flex justify-between items-center text-white sticky top-0 z-10">
           <div>
@@ -153,17 +155,17 @@ export function InvoiceCapture({ proveedor, onClose }: InvoiceCaptureProps) {
                 <h3 className="font-bold text-slate-800">Documento Físico</h3>
                 <p className="text-sm text-slate-500">Toma una foto de la factura con tu cámara.</p>
               </div>
-              <input 
-                type="file" 
-                accept="image/*" 
-                capture="environment" 
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
                 multiple
-                className="hidden" 
+                className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileSelect}
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
               >

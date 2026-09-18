@@ -5,6 +5,7 @@ import { SupplierForm } from './SupplierForm';
 import { InvoiceTimeline } from './InvoiceTimeline';
 import { InvoiceCapture } from './InvoiceCapture';
 import type { Proveedor } from '../../types';
+import { isFacturaVencida, isFacturaPendienteVigente } from '../../lib/facturas';
 
 interface SupplierProfileProps {
   proveedor: Proveedor;
@@ -18,8 +19,8 @@ export function SupplierProfile({ proveedor, onBack }: SupplierProfileProps) {
 
   const supplierFacturas = facturas.filter(f => f.proveedor_id === proveedor.id);
   const totalComprado = supplierFacturas.reduce((acc, f) => acc + f.monto_total, 0);
-  const pendientes = supplierFacturas.filter(f => f.estado === 'pendiente');
-  const vencidas = supplierFacturas.filter(f => f.estado === 'vencida' || (f.estado === 'pendiente' && f.fecha_vencimiento && new Date(f.fecha_vencimiento) < new Date()));
+  const pendientes = supplierFacturas.filter(f => isFacturaPendienteVigente(f));
+  const vencidas = supplierFacturas.filter(f => isFacturaVencida(f));
   const totalPendiente = pendientes.reduce((acc, f) => acc + f.monto_total, 0);
 
   return (
@@ -37,10 +38,10 @@ export function SupplierProfile({ proveedor, onBack }: SupplierProfileProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Column: Ficha Comercial & KPIs */}
         <div className="lg:col-span-1 space-y-6">
-          
+
           {/* Main Card */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
             <div className="w-16 h-16 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center mb-4">
@@ -90,7 +91,7 @@ export function SupplierProfile({ proveedor, onBack }: SupplierProfileProps) {
                   )}
                 </div>
                 {proveedor.detalle_bonificacion && <p className="text-sm mt-2 text-slate-600 bg-slate-50 p-2 rounded-lg">{proveedor.detalle_bonificacion}</p>}
-                
+
                 {proveedor.politica_vencidos && (
                   <div className="mt-3">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Pol. Vencidos</span>

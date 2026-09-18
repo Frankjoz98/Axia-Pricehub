@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { errorMessage } from '../lib/utils';
 import type { Meta } from '../types';
 
 export function useMetas() {
@@ -22,8 +23,8 @@ export function useMetas() {
 
       if (error) throw error;
       setMetas(data || []);
-    } catch (error: any) {
-      console.error('Error fetching metas:', error.message);
+    } catch (error) {
+      console.error('Error fetching metas:', errorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -42,8 +43,8 @@ export function useMetas() {
 
       if (error) throw error;
       setMetas(prev => [data, ...prev]);
-    } catch (error: any) {
-      console.error('Error adding meta:', error.message);
+    } catch (error) {
+      console.error('Error adding meta:', errorMessage(error));
       throw error;
     }
   };
@@ -59,8 +60,8 @@ export function useMetas() {
 
       if (error) throw error;
       setMetas(prev => prev.map(m => m.id === id ? data : m));
-    } catch (error: any) {
-      console.error('Error updating meta:', error.message);
+    } catch (error) {
+      console.error('Error updating meta:', errorMessage(error));
       throw error;
     }
   };
@@ -70,8 +71,8 @@ export function useMetas() {
       const { error } = await supabase.from('metas').delete().eq('id', id);
       if (error) throw error;
       setMetas(prev => prev.filter(m => m.id !== id));
-    } catch (error: any) {
-      console.error('Error deleting meta:', error.message);
+    } catch (error) {
+      console.error('Error deleting meta:', errorMessage(error));
       throw error;
     }
   };

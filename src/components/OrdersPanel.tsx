@@ -1,22 +1,26 @@
 import { useState } from 'react';
-import { Package, Clock, CheckCircle2, ChevronDown, ChevronUp, Share2, AlertCircle, Trash2, ShoppingCart } from 'lucide-react';
+import { Package, Clock, CheckCircle2, ChevronDown, ChevronUp, Share2, AlertCircle, Trash2, ShoppingCart, BarChart3 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { cn } from '../lib/utils';
 import type { PurchaseOrder } from '../types';
 
 import { CheckCircle2 as CheckSquareIcon } from 'lucide-react';
 import PedidosTerminal from './pedidos/PedidosTerminal';
+import PurchaseAnalytics from './PurchaseAnalytics';
+import { useAppContext } from '../context/AppContext';
+import { todayYMD, parseLocalYMD } from '../lib/dates';
 
 interface OrdersPanelProps {
   ordenes: PurchaseOrder[];
   setOrdenes: (orders: PurchaseOrder[]) => void;
-  onReopenOrder?: (order: PurchaseOrder) => boolean;
+  onReopenOrder?: (order: PurchaseOrder) => number;
 }
 
 export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder }: OrdersPanelProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'proveedores' | 'caja'>('proveedores');
-  
+  const [viewMode, setViewMode] = useState<'proveedores' | 'caja' | 'analiticas'>('proveedores');
+  const { ventas } = useAppContext();
+
   // Local state para los campos de conciliación en edición
   const [conciliacionEdit, setConciliacionEdit] = useState<Record<string, {monto: string, notas: string}>>({});
 
@@ -37,8 +41,8 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const updatedItems = [...order.items];
-    updatedItems[itemIndex].receivedQuantity = newQty;
+    // Copia profunda del ítem: nunca mutar los objetos que viven en el contexto
+    const updatedItems = order.items.map((it, i) => i === itemIndex ? { ...it, receivedQuantity: newQty } : it);
 
     // Check status
     const allReceived = updatedItems.every(i => i.receivedQuantity >= i.orderedQuantity);
@@ -52,7 +56,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
       .from('ordenes_compra')
       .update({ items: updatedItems, status })
       .eq('id', orderId);
-      
+
     if (error) {
       alert('Error actualizando: ' + error.message);
       // Revert if error
@@ -77,10 +81,10 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
     if (!confirm("¿Deseas quitar este producto de la orden?")) return;
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
-    
+
     const updatedItems = [...order.items];
     updatedItems.splice(itemIndex, 1);
-    
+
     if (updatedItems.length === 0) {
       await deleteOrder(orderId);
       return;
@@ -88,11 +92,11 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
 
     const newTotal = updatedItems.reduce((acc, curr) => acc + (curr.orderedQuantity * curr.netPrice), 0);
     setOrdenes(orders.map(o => o.id === orderId ? { ...o, items: updatedItems, total: newTotal } : o));
-    
+
     const { error } = await supabase.from('ordenes_compra')
       .update({ items: updatedItems, total: newTotal })
       .eq('id', orderId);
-      
+
     if (error) {
       alert("Error al actualizar orden: " + error.message);
       // Revert
@@ -103,26 +107,37 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
 
   const handleReopen = async (order: PurchaseOrder) => {
     if (!onReopenOrder) return;
+    if (order.conciliado) {
+      alert("Esta orden ya fue conciliada con una factura real y forma parte del historial financiero. No se puede reabrir.");
+      return;
+    }
     if (!confirm("Esta orden será movida a tu carrito activo para editarla. ¿Deseas continuar?")) return;
-    const success = onReopenOrder(order);
-    if (success) {
-      setOrdenes(orders.filter(o => o.id !== order.id));
-      await supabase.from('ordenes_compra').delete().eq('id', order.id);
+    const missing = onReopenOrder(order);
+    if (missing > 0) {
+      alert(`${missing} producto(s) ya no existen en el catálogo y no se agregaron al carrito. La orden se mantiene en el historial.`);
+      return;
+    }
+    setOrdenes(orders.filter(o => o.id !== order.id));
+    const { error } = await supabase.from('ordenes_compra').delete().eq('id', order.id);
+    if (error) {
+      alert("Error al retirar la orden del historial: " + error.message);
+      const { data } = await supabase.from('ordenes_compra').select('*').order('created_at', { ascending: false });
+      if (data) setOrdenes(data as PurchaseOrder[]);
     }
   };
 
   const handleConciliar = async (orderId: string) => {
     const editData = conciliacionEdit[orderId];
     if (!editData) return;
-    
+
     const monto = parseFloat(editData.monto) || 0;
-    
-    setOrdenes(orders.map(o => o.id === orderId ? { 
-      ...o, 
-      conciliado: true, 
-      monto_factura_real: monto, 
+
+    setOrdenes(orders.map(o => o.id === orderId ? {
+      ...o,
+      conciliado: true,
+      monto_factura_real: monto,
       notas_recepcion: editData.notas,
-      fecha_recepcion: new Date().toISOString().split('T')[0]
+      fecha_recepcion: todayYMD()
     } : o));
 
     const { error } = await supabase.from('ordenes_compra')
@@ -130,7 +145,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
         conciliado: true,
         monto_factura_real: monto,
         notas_recepcion: editData.notas,
-        fecha_recepcion: new Date().toISOString().split('T')[0]
+        fecha_recepcion: todayYMD()
       })
       .eq('id', orderId);
 
@@ -143,31 +158,37 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
   };
   const shareWithTeam = (order: PurchaseOrder) => {
     let msg = `📋 *REVISIÓN DE PEDIDO - ${order.provider}*\nFecha: ${new Date(order.created_at).toLocaleDateString()}\n\nPor favor cotejar lo siguiente al recibir:\n\n`;
-    
+
     order.items.forEach(item => {
       msg += `[  ] ${item.orderedQuantity}x ${item.productName}\n`;
     });
-    
+
     msg += `\n_Generado por Axia PriceHub_`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl mx-auto pb-20">
-      
+
       {/* Top Toggle */}
       <div className="bg-slate-200/50 p-1.5 rounded-2xl flex max-w-md mx-auto mb-8">
-        <button 
+        <button
           onClick={() => setViewMode('proveedores')}
           className={cn("flex-1 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2", viewMode === 'proveedores' ? "bg-white text-violet-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
         >
           <Package className="w-4 h-4" /> A Proveedores
         </button>
-        <button 
+        <button
           onClick={() => setViewMode('caja')}
           className={cn("flex-1 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2", viewMode === 'caja' ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")}
         >
           <ShoppingCart className="w-4 h-4" /> Desde Caja
+        </button>
+        <button
+          onClick={() => setViewMode('analiticas')}
+          className={cn("flex-1 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2", viewMode === 'analiticas' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-700")}
+        >
+          <BarChart3 className="w-4 h-4" /> Analíticas
         </button>
       </div>
 
@@ -175,6 +196,8 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
         <div className="w-full">
           <PedidosTerminal isEmbedded={true} />
         </div>
+      ) : viewMode === 'analiticas' ? (
+        <PurchaseAnalytics ordenes={orders} ventas={ventas} />
       ) : (
         <>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
@@ -197,11 +220,11 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
           {orders.map(order => {
             const isExpanded = expandedId === order.id;
             const dateStr = new Date(order.created_at).toLocaleString('es-NI', { dateStyle: 'medium', timeStyle: 'short' });
-            
+
             return (
               <div key={order.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all">
                 {/* Header */}
-                <div 
+                <div
                   onClick={() => {
                     setExpandedId(isExpanded ? null : order.id);
                     if (!isExpanded) initConciliacion(order);
@@ -209,11 +232,11 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                   className="p-4 cursor-pointer hover:bg-slate-50 flex items-center justify-between"
                 >
                   <div className="flex items-center gap-4">
-                    <div className={cn("p-2 rounded-xl", 
-                      order.status === 'Completado' ? 'bg-emerald-100 text-emerald-600' : 
+                    <div className={cn("p-2 rounded-xl",
+                      order.status === 'Completado' ? 'bg-emerald-100 text-emerald-600' :
                       order.status === 'Parcial' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
                     )}>
-                      {order.status === 'Completado' ? <CheckCircle2 className="w-5 h-5" /> : 
+                      {order.status === 'Completado' ? <CheckCircle2 className="w-5 h-5" /> :
                        order.status === 'Parcial' ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
                     </div>
                     <div>
@@ -222,8 +245,8 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className={cn("px-2.5 py-1 rounded-md text-xs font-bold", 
-                      order.status === 'Completado' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 
+                    <span className={cn("px-2.5 py-1 rounded-md text-xs font-bold",
+                      order.status === 'Completado' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                       order.status === 'Parcial' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
                     )}>
                       {order.status}
@@ -238,7 +261,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                       <div className="flex gap-2 w-full sm:w-auto">
                         {!order.conciliado && (
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
                             className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
                           >
@@ -246,7 +269,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                           </button>
                         )}
                         {onReopenOrder && (
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); handleReopen(order); }}
                             className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 bg-violet-50 hover:bg-violet-100 text-violet-600 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
                           >
@@ -254,7 +277,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                           </button>
                         )}
                       </div>
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); shareWithTeam(order); }}
                         className="w-full sm:w-auto flex justify-center items-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
                       >
@@ -269,20 +292,20 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                             <h4 className="font-bold text-slate-900 text-sm">{item.productName}</h4>
                             <p className="text-[10px] text-slate-500 font-mono">Cód: {item.providerCode}</p>
                           </div>
-                          
+
                           <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
                             <div className="text-center px-3">
                               <span className="block text-[10px] text-slate-400 font-bold uppercase">Pedido</span>
                               <span className="text-lg font-black text-slate-700">{item.orderedQuantity}</span>
                             </div>
-                            
+
                             <div className="w-px h-8 bg-slate-200"></div>
-                            
+
                             <div className="text-center px-3">
                               <span className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Recibido</span>
                               <div className="flex items-center gap-2">
-                                <input 
-                                  type="number" 
+                                <input
+                                  type="number"
                                   min="0"
                                   value={item.receivedQuantity}
                                   onChange={(e) => updateReceivedQuantity(order.id, idx, parseInt(e.target.value) || 0)}
@@ -291,7 +314,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                               </div>
                             </div>
 
-                            <button 
+                            <button
                               onClick={(e) => { e.stopPropagation(); deleteOrderItem(order.id, idx); }}
                               className="p-2 ml-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                               title="Eliminar producto del pedido"
@@ -309,7 +332,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                         <CheckSquareIcon className="w-5 h-5 text-indigo-600" />
                         <h4 className="font-black text-slate-800">Conciliación de Pagos</h4>
                       </div>
-                      
+
                       {order.conciliado ? (
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-indigo-50/50 p-4 rounded-lg border border-indigo-100">
                           <div>
@@ -319,7 +342,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                           </div>
                           <div className="text-right">
                             <span className="inline-block bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold mb-2">Conciliado</span>
-                            <p className="text-xs text-slate-400">El {new Date(order.fecha_recepcion || '').toLocaleDateString()}</p>
+                            <p className="text-xs text-slate-400">El {order.fecha_recepcion ? parseLocalYMD(order.fecha_recepcion).toLocaleDateString('es-NI') : '-'}</p>
                           </div>
                         </div>
                       ) : (
@@ -327,8 +350,8 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                               <label className="block text-xs font-bold text-slate-500 mb-1">Monto de la Factura (C$)</label>
-                              <input 
-                                type="number" 
+                              <input
+                                type="number"
                                 step="0.01"
                                 value={conciliacionEdit[order.id]?.monto || ''}
                                 onChange={(e) => setConciliacionEdit(prev => ({...prev, [order.id]: {...prev[order.id], monto: e.target.value}}))}
@@ -358,7 +381,7 @@ export default function OrdersPanel({ ordenes: orders, setOrdenes, onReopenOrder
                             />
                           </div>
                           <div className="flex justify-end pt-2">
-                            <button 
+                            <button
                               onClick={() => handleConciliar(order.id)}
                               className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold transition-colors"
                             >

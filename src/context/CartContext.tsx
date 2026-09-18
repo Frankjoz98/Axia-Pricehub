@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { UnifiedProduct, SupplierOffer, CartItem } from '../types';
+import type { UnifiedProduct, SupplierOffer, CartItem, PurchaseOrder } from '../types';
 
 interface CartContextType {
   cart: CartItem[];
   addToCart: (product: UnifiedProduct, offer: SupplierOffer, quantity?: number) => void;
   updateQuantity: (index: number, delta: number) => void;
   clearProviderCart: (provider: string) => void;
-  handleReopenOrder: (order: any, productos: UnifiedProduct[]) => boolean;
+  clearCart: () => void;
+  /** Devuelve cuántos ítems de la orden no pudieron reconstruirse (0 = todo encontrado). */
+  handleReopenOrder: (order: PurchaseOrder, productos: UnifiedProduct[]) => number;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
 }
@@ -25,7 +27,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     return [];
   });
-  
+
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
@@ -55,42 +57,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const handleReopenOrder = (order: any, productos: UnifiedProduct[]): boolean => {
-    const newCartItems: CartItem[] = [];
-    let allFound = true;
-    
+  const handleReopenOrder = (order: PurchaseOrder, productos: UnifiedProduct[]): number => {
+    let missing = 0;
+
     for (const item of order.items) {
       const fullProduct = productos.find(p => p.id === item.productId);
-      if (fullProduct) {
-        const offer = fullProduct.offers.find(o => o.provider === order.provider && o.providerCode === item.providerCode);
-        if (offer) {
-          newCartItems.push({
-            product: fullProduct,
-            selectedOffer: offer,
-            quantity: item.orderedQuantity
-          });
-        } else {
-          allFound = false;
-        }
+      const offer = fullProduct?.offers.find(o => o.provider === order.provider && o.providerCode === item.providerCode);
+      if (fullProduct && offer) {
+        // Se fusiona con lo que ya haya en el carrito (misma regla que addToCart)
+        addToCart(fullProduct, offer, item.orderedQuantity);
       } else {
-        allFound = false;
+        missing++;
       }
     }
-    
-    if (newCartItems.length > 0) {
-      setCart(prev => [...prev, ...newCartItems]);
-    }
-    
+
     setIsCartOpen(true);
-    return allFound;
+    return missing;
   };
 
   const clearProviderCart = (provider: string) => {
     setCart(prev => prev.filter(item => item.selectedOffer.provider !== provider));
   };
 
+  const clearCart = () => setCart([]);
+
   return (
-    <CartContext.Provider value={{ cart, addToCart, updateQuantity, clearProviderCart, handleReopenOrder, isCartOpen, setIsCartOpen }}>
+    <CartContext.Provider value={{ cart, addToCart, updateQuantity, clearProviderCart, clearCart, handleReopenOrder, isCartOpen, setIsCartOpen }}>
       {children}
     </CartContext.Provider>
   );

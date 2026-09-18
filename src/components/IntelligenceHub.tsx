@@ -4,6 +4,7 @@ import { cn } from '../lib/utils';
 import type { VentaHistorica, OdooInventario, PurchaseOrder, UnifiedProduct, SupplierOffer } from '../types';
 import { useBusinessMetrics } from '../hooks/useBusinessMetrics';
 import { useAlerts } from '../context/AlertsContext';
+import { todayYMD, startOfLocalDay, endOfLocalDay, startOfLocalWeekMonday } from '../lib/dates';
 
 import SmartRestock from './SmartRestock';
 import PrintableReport from './reports/PrintableReport';
@@ -26,8 +27,8 @@ export default function IntelligenceHub({ ventas, inventario, ordenes, productos
   const [activeTab, setActiveTab] = useState<'overview' | 'time' | 'labs' | 'staff' | 'lupa' | 'cierres' | 'alerts' | 'restock'>('overview');
   const [timeGrouping, setTimeGrouping] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reportStartDate, setReportStartDate] = useState(todayYMD());
+  const [reportEndDate, setReportEndDate] = useState(todayYMD());
   const [cierresComparisons, setCierresComparisons] = useState<Record<string, string>>({});
   const [globalDateRange, setGlobalDateRange] = useState<{ start: Date | null, end: Date | null, filterType: 'today' | 'week' | 'month' | 'all' }>({ start: null, end: null, filterType: 'all' });
   const [lupaPreSearch, setLupaPreSearch] = useState('');
@@ -43,17 +44,13 @@ export default function IntelligenceHub({ ventas, inventario, ordenes, productos
 
   const setQuickFilter = (type: 'today' | 'week' | 'month' | 'all') => {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    
+    const todayStart = startOfLocalDay(now);
+    const todayEnd = endOfLocalDay(now);
+
     if (type === 'today') {
       setGlobalDateRange({ start: todayStart, end: todayEnd, filterType: type });
     } else if (type === 'week') {
-      const day = todayStart.getDay();
-      const diff = todayStart.getDate() - day + (day === 0 ? -6 : 1);
-      const startOfWeek = new Date(todayStart.setDate(diff));
-      startOfWeek.setHours(0, 0, 0, 0);
-      setGlobalDateRange({ start: startOfWeek, end: todayEnd, filterType: type });
+      setGlobalDateRange({ start: startOfLocalWeekMonday(now), end: todayEnd, filterType: type });
     } else if (type === 'month') {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
       setGlobalDateRange({ start: startOfMonth, end: todayEnd, filterType: type });

@@ -1,12 +1,12 @@
 export type Category = string;
 
-export type ProviderName = 
-  | 'DICEGSA' 
-  | 'LETERAGO' 
-  | 'DIDELSA' 
-  | 'DISMEDIC' 
-  | 'IMFARSA' 
-  | 'VESANIC' 
+export type ProviderName =
+  | 'DICEGSA'
+  | 'LETERAGO'
+  | 'DIDELSA'
+  | 'DISMEDIC'
+  | 'IMFARSA'
+  | 'VESANIC'
   | 'WALMART / MAYORISTA'
   | 'LOCAL'
   | string;
@@ -165,10 +165,10 @@ export interface AgendaEvento {
   hora_fin?: string;
   completado: boolean;
   recurrente: boolean;
-  patron_recurrencia?: Record<string, any>;
+  patron_recurrencia?: Record<string, unknown>;
   proveedor_id?: string;
   factura_id?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   created_at: string;
   updated_at?: string;
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, X, ShieldCheck, Download, AlertTriangle } from 'lucide-react';
 import type { VentaHistorica } from '../types';
 import * as XLSX from 'xlsx';
+import { todayYMD } from '../lib/dates';
 
 interface DataAuditorModalProps {
   isOpen: boolean;
@@ -14,9 +15,9 @@ export default function DataAuditorModal({ isOpen, onClose, ventas }: DataAudito
 
   if (!isOpen) return null;
 
-  const filteredVentas = searchTerm.length > 2 
-    ? ventas.filter(v => 
-        v.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredVentas = searchTerm.length > 2
+    ? ventas.filter(v =>
+        v.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.order_ref.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : [];
@@ -37,7 +38,7 @@ export default function DataAuditorModal({ isOpen, onClose, ventas }: DataAudito
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
-    XLSX.writeFile(wb, `Auditoria_Ventas_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `Auditoria_Ventas_${todayYMD()}.xlsx`);
   };
 
   const totalQty = filteredVentas.reduce((a, b) => a + b.quantity, 0);
@@ -46,7 +47,7 @@ export default function DataAuditorModal({ isOpen, onClose, ventas }: DataAudito
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        
+
         {/* Header */}
         <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-3">
@@ -76,7 +77,7 @@ export default function DataAuditorModal({ isOpen, onClose, ventas }: DataAudito
                 className="w-full pl-10 pr-4 py-3 rounded-xl border-slate-200 bg-slate-50 border outline-hidden focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
               />
             </div>
-            <button 
+            <button
               onClick={handleExport}
               disabled={filteredVentas.length === 0}
               className="px-4 py-2 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"

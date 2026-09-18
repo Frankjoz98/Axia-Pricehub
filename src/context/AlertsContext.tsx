@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useAppContext } from './AppContext';
 import { AlertTriangle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { buildInventarioIndex } from '../lib/odoo';
 
 export type AlertType = 'error' | 'warning' | 'info';
 
@@ -45,14 +46,16 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     // 2. Detección de quiebres de stock en productos de alta demanda
     // Calculamos qué productos se venden más
     if (ventas && ventas.length > 0) {
-      const salesByProduct = new Map<string, number>();
+      // Cruce por odoo_id normalizado (RF-7); el mismo índice que usan los reportes
+      const invIndex = buildInventarioIndex(inventario);
+      const salesByInvId = new Map<string, number>();
       ventas.forEach(v => {
-        const current = salesByProduct.get(v.odoo_id || '') || 0;
-        salesByProduct.set(v.odoo_id || '', current + v.quantity);
+        const inv = invIndex.find(v);
+        if (inv) salesByInvId.set(inv.id, (salesByInvId.get(inv.id) || 0) + v.quantity);
       });
 
-      const highDemandOutOfStock = inventario.filter(p => 
-        p.stock <= 0 && (salesByProduct.get(p.odoo_id || '') || 0) > 30 // Umbral de 30 ventas históricas
+      const highDemandOutOfStock = inventario.filter(p =>
+        p.stock <= 0 && (salesByInvId.get(p.id) || 0) > 30 // Umbral de 30 unidades históricas
       );
 
       if (highDemandOutOfStock.length > 0) {

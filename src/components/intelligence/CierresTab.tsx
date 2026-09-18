@@ -2,25 +2,7 @@ import { useState } from 'react';
 import { Search, ChevronDown, ChevronUp, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-interface ProductLine {
-  name: string;
-  qty: number;
-  price: number;
-  total: number;
-}
-
-interface SessionSummary {
-  sesion: string;
-  cajero: string;
-  minDate: string;
-  maxDate: string;
-  turno: string;
-  revenue: number;
-  cost: number;
-  margin: number;
-  orders: Set<string>;
-  products: ProductLine[];
-}
+import type { SessionSummary } from '../../hooks/useBusinessMetrics';
 
 interface CierresTabProps {
   sessionSummaries: SessionSummary[];
@@ -36,7 +18,7 @@ export default function CierresTab({ sessionSummaries, comparisons, setCompariso
   const formatCurrency = (val: number) => `C$ ${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const filteredSessions = sessionSummaries.filter(s => {
-    const matchesSearch = s.sesion.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch = s.sesion.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           s.cajero.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesTurno = turnoFilter === 'all' || s.turno === turnoFilter;
     return matchesSearch && matchesTurno;
@@ -170,7 +152,7 @@ export default function CierresTab({ sessionSummaries, comparisons, setCompariso
               </div>
 
               {/* Card Footer / Expand */}
-              <button 
+              <button
                 onClick={() => setExpandedSession(isExpanded ? null : session.sesion)}
                 className="w-full p-3 bg-slate-50 border-t border-slate-100 flex justify-center items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
               >
@@ -191,7 +173,7 @@ export default function CierresTab({ sessionSummaries, comparisons, setCompariso
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50">
-                        {session.products.sort((a,b) => b.total - a.total).map((p, idx) => (
+                        {[...session.products].sort((a, b) => b.total - a.total).map((p, idx) => (
                           <tr key={idx} className="hover:bg-white/5 transition-colors group">
                             <td className="py-2.5 text-xs font-medium text-slate-300 group-hover:text-white transition-colors">{p.name}</td>
                             <td className="py-2.5 text-xs text-slate-400 text-right">{p.qty}</td>
@@ -208,7 +190,7 @@ export default function CierresTab({ sessionSummaries, comparisons, setCompariso
           );
         })}
       </div>
-      
+
       {filteredSessions.length === 0 && (
         <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 border-dashed">
           <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />

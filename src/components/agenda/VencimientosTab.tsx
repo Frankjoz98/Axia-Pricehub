@@ -2,17 +2,16 @@ import { useMemo } from 'react';
 import { AlertTriangle, Download, Clock, PackageX } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { downloadFile, cn } from '../../lib/utils';
+import { daysUntil, todayYMD } from '../../lib/dates';
 
 export default function VencimientosTab() {
   const { inventario } = useAppContext();
-  
+
   const vencimientos = useMemo(() => {
-    const today = new Date();
     const items = inventario.filter(i => i.fecha_vencimiento && i.stock != null && i.stock > 0);
-    
+
     return items.map(item => {
-      const vDate = new Date(item.fecha_vencimiento!);
-      const diffDays = Math.ceil((vDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const diffDays = daysUntil(item.fecha_vencimiento!);
       return { ...item, diffDays };
     }).sort((a, b) => a.diffDays - b.diffDays);
   }, [inventario]);
@@ -21,7 +20,7 @@ export default function VencimientosTab() {
     let vencidos = 0;
     let treintaDias = 0;
     let noventaDias = 0;
-    
+
     vencimientos.forEach(v => {
       if (v.diffDays < 0) vencidos++;
       else if (v.diffDays <= 30) treintaDias++;
@@ -32,7 +31,7 @@ export default function VencimientosTab() {
 
   const handleExport = () => {
     if (vencimientos.length === 0) return;
-    
+
     const rows = vencimientos.map(v => [
       v.product_name,
       v.referencia || '',
@@ -41,11 +40,11 @@ export default function VencimientosTab() {
       v.fecha_vencimiento || '',
       v.diffDays.toString()
     ]);
-    
-    const csvContent = "Producto,Referencia,Marca,Stock,Fecha Vencimiento,Dias Restantes\n" 
+
+    const csvContent = "Producto,Referencia,Marca,Stock,Fecha Vencimiento,Dias Restantes\n"
       + rows.map(e => e.map(cell => `"${cell}"`).join(",")).join("\n");
-      
-    downloadFile(csvContent, `reporte_vencimientos_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
+
+    downloadFile(csvContent, `reporte_vencimientos_${todayYMD()}.csv`, 'text/csv');
   };
 
   const getStatusColor = (days: number) => {

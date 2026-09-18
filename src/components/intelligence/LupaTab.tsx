@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Package, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { toLocalYMD, todayYMD } from '../../lib/dates';
+import type { VentaHistorica, OdooInventario } from '../../types';
 
 interface LupaTabProps {
-  ventas: any[];
-  inventario: any[];
+  ventas: VentaHistorica[];
+  inventario: OdooInventario[];
   preSearch?: string;
   onClearPreSearch?: () => void;
 }
@@ -28,18 +30,18 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
     if (isSessionSearch) {
       sessionIds = lowerSearch.replace('sessions:', '').split(',').map(s => s.trim());
     }
-    
+
     return ventas.filter(v => {
       if (isSessionSearch) {
         return v.sesion && sessionIds.includes(v.sesion.toLowerCase());
       }
 
-      const vDateStr = new Date(v.date).toISOString().split('T')[0];
+      const vDateStr = toLocalYMD(new Date(v.date));
       if (isDateSearch) {
         return vDateStr === lowerSearch;
       }
 
-      return v.product_name.toLowerCase().includes(lowerSearch) || 
+      return v.product_name.toLowerCase().includes(lowerSearch) ||
              (v.order_ref && v.order_ref.toLowerCase().includes(lowerSearch)) ||
              (v.marca && v.marca.toLowerCase().includes(lowerSearch)) ||
              (v.sesion && v.sesion.toLowerCase().includes(lowerSearch));
@@ -49,8 +51,8 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
   const lupaInventoryResults = useMemo(() => {
     if (lupaSearch.length < 3) return [];
     const lowerSearch = lupaSearch.toLowerCase();
-    return inventario.filter(i => 
-      i.product_name.toLowerCase().includes(lowerSearch) || 
+    return inventario.filter(i =>
+      i.product_name.toLowerCase().includes(lowerSearch) ||
       (i.referencia && i.referencia.toLowerCase().includes(lowerSearch)) ||
       (i.marca && i.marca.toLowerCase().includes(lowerSearch))
     );
@@ -59,7 +61,7 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
   const lupaTotalQty = useMemo(() => lupaResults.reduce((a, b) => a + b.quantity, 0), [lupaResults]);
   const lupaTotalRevenue = useMemo(() => lupaResults.reduce((a, b) => a + (b.quantity * b.unit_price), 0), [lupaResults]);
   const lupaTotalCost = useMemo(() => lupaResults.reduce((a, b) => a + (b.total_cost || 0), 0), [lupaResults]);
-  
+
   const handleExportLupa = () => {
     if (lupaResults.length === 0) return;
     const exportData = lupaResults.map(v => ({
@@ -76,7 +78,7 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
-    XLSX.writeFile(wb, `Auditoria_${lupaSearch}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `Auditoria_${lupaSearch}_${todayYMD()}.xlsx`);
   };
 
   return (
@@ -94,7 +96,7 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
           </button>
         )}
       </div>
-      
+
       <div className="relative mb-8">
         <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
         <input type="text" placeholder="Buscar por código Odoo, nombre o marca..." value={lupaSearch} onChange={(e) => setLupaSearch(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-base focus:ring-2 focus:ring-emerald-500 font-medium" />
@@ -102,13 +104,13 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
 
       {lupaSearch.length >= 3 ? (
         <div className="space-y-4">
-          
+
           {/* Inventario Matches */}
           {lupaInventoryResults.length > 0 && (
             <div className="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
               <h4 className="font-bold text-indigo-900 mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Coincidencias en Inventario Local (Odoo)</h4>
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                {lupaInventoryResults.map((inv: any) => (
+                {lupaInventoryResults.map(inv => (
                   <div key={inv.id} className="flex flex-wrap items-center gap-4 bg-white p-3 rounded-lg border border-indigo-50/50 shadow-sm">
                     <div className="flex-1 min-w-50">
                       <p className="font-bold text-slate-800 text-sm">{inv.product_name}</p>
@@ -167,7 +169,7 @@ export default function LupaTab({ ventas, inventario, preSearch, onClearPreSearc
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {lupaResults.map((v: any, i: number) => (
+                {lupaResults.map((v, i) => (
                   <tr key={i} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
                       <p className="font-bold text-slate-900">{new Date(v.date).toLocaleDateString()}</p>
