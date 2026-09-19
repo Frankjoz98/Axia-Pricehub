@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppContext } from './AppContext';
 import { AlertTriangle, X } from 'lucide-react';
 import { cn } from '../lib/utils';
