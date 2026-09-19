@@ -77,12 +77,16 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     setAlerts(prev => prev.filter(a => a.id !== id));
   };
 
+  const location = useLocation();
+  const isPublicOrIsolatedRoute = location.pathname.startsWith('/portal-medico') || location.pathname.startsWith('/pedidos');
+
   return (
     <AlertsContext.Provider value={{ alerts, dismissAlert }}>
       {children}
       {/* Sistema Global de Notificaciones (Toasts) */}
-      <div className="fixed top-4 right-4 z-100 flex flex-col gap-3 pointer-events-none max-w-sm w-full">
-        {alerts.map(alert => (
+      {!isPublicOrIsolatedRoute && (
+        <div className="fixed top-4 right-4 z-100 flex flex-col gap-3 pointer-events-none max-w-sm w-full">
+          {alerts.map(alert => (
           <div key={alert.id} className={cn(
             "pointer-events-auto rounded-xl p-4 shadow-xl border-l-4 flex gap-3 animate-in slide-in-from-right-8 fade-in duration-300",
             alert.type === 'error' ? "bg-rose-50 border-rose-500 text-rose-900" :
@@ -104,7 +108,8 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
             </button>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </AlertsContext.Provider>
   );
 }
